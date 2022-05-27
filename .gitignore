@@ -1,2 +1,5 @@
 output
 target
+*.pem
+config.sh
+.vscode
