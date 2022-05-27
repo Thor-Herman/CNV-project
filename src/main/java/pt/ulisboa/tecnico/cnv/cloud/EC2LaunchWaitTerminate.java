@@ -1,3 +1,5 @@
+package pt.ulisboa.tecnico.cnv.cloud;
+
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.EnvironmentVariableCredentialsProvider;
 import com.amazonaws.services.ec2.AmazonEC2;
