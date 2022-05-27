@@ -1,4 +1,4 @@
-package pt.ulisboa.tecnico.cnv.cloud;
+package pt.ulisboa.tecnico.cnv.imageproc;
 
 import java.util.HashSet;
 import java.util.List;
