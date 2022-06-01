@@ -12,6 +12,9 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -41,43 +44,31 @@ public class LoadBalancer implements HttpHandler {
         try {
             instances = EC2Utility.getRunningInstances(ec2); // TODO: HANDLE CASE WITH NO RUNNING INSTANCES
             roundRobinIndex = roundRobinIndex >= instances.size() - 1 ? 0 : roundRobinIndex + 1;
-            String dns = instances.get(roundRobinIndex).getPublicDnsName();
-            forwardRequest(t, dns);
+            String ip = instances.get(roundRobinIndex).getPublicIpAddress();
+            String response = forwardRequest(t, ip);
+            System.out.println(response);
+            returnResponse(t, response);
         } catch (Exception e) {
             System.out.println(e);
             return;
         }
     }
 
-    private void forwardRequest(HttpExchange t, String dns) throws IOException {
-        try {
-            HttpURLConnection connection = (HttpURLConnection) new URL("https://" + dns.strip() + endpoint.strip())
-                    .openConnection();
-            connection.setRequestMethod("POST");
-            for (String header : t.getRequestHeaders().keySet()) {
-                connection.setRequestProperty(header, t.getRequestHeaders().getFirst(header));
-            }
-            System.out.println(connection);
-            System.out.println("Here1");
-            connection.setDoOutput(true);
-            connection.setDoInput(true);
-            OutputStream outStream = connection.getOutputStream();
-            InputStream is = t.getRequestBody();
-            is.transferTo(outStream);
-            outStream.flush();
-            outStream.close();
+    private String forwardRequest(HttpExchange t, String ip) throws Exception {
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://" + ip + ":" + 8000 + endpoint))
+                .POST(HttpRequest.BodyPublishers.ofByteArray(t.getRequestBody().readAllBytes()))
+                .build();
+        System.out.println(request);
+        return client.send(request, HttpResponse.BodyHandlers.ofString()).body();
+    }
 
-            System.out.println(connection.getResponseMessage());
-            System.out.println("Here2");
-            long length = is.available();
-            t.sendResponseHeaders(200, length);
-            connection.getInputStream().transferTo(t.getResponseBody());
-
-            System.out.println("Here");
-            System.out.println(connection);
-        } catch (Exception e) {
-            System.out.println(e);
-        }
+    private void returnResponse(HttpExchange t, String response) throws Exception {
+        t.sendResponseHeaders(200, response.length());
+        OutputStream os = t.getResponseBody();
+        os.write(response.getBytes());
+        os.close();
     }
 
     @Override
