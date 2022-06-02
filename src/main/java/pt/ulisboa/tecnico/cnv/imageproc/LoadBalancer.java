@@ -17,6 +17,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.ec2.AmazonEC2;
@@ -42,16 +43,22 @@ public class LoadBalancer implements HttpHandler {
 
     private void handleRequest(HttpExchange t) throws IOException {
         try {
-            instances = EC2Utility.getRunningInstances(ec2); // TODO: HANDLE CASE WITH NO RUNNING INSTANCES
-            roundRobinIndex = roundRobinIndex >= instances.size() - 1 ? 0 : roundRobinIndex + 1;
-            String ip = instances.get(roundRobinIndex).getPublicIpAddress();
-            String response = forwardRequest(t, ip);
-            System.out.println(response);
+            VM vm = getNextVM();
+            vm.currentAmountOfRequests++; // TODO: How can this ever increase past 1? The loadbalancer waits for the result
+            String response = forwardRequest(t, vm.ipAddress);
+            vm.currentAmountOfRequests--;
+            // System.out.println(response);
             returnResponse(t, response);
         } catch (Exception e) {
             System.out.println(e);
             return;
         }
+    }
+
+    private VM getNextVM() {
+        List<VM> vms = AutoScaler.getVMsNotMarkedForDeletion();
+        roundRobinIndex = roundRobinIndex >= vms.size() - 1 ? 0 : roundRobinIndex + 1;
+        return vms.get(roundRobinIndex);
     }
 
     private String forwardRequest(HttpExchange t, String ip) throws Exception {

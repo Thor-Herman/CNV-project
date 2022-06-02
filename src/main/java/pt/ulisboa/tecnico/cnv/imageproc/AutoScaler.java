@@ -3,25 +3,35 @@ package pt.ulisboa.tecnico.cnv.imageproc;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import com.amazonaws.services.cloudwatch.AmazonCloudWatch;
 import com.amazonaws.services.cloudwatch.model.Datapoint;
 import com.amazonaws.services.cloudwatch.model.Dimension;
 import com.amazonaws.services.cloudwatch.model.GetMetricStatisticsRequest;
 import com.amazonaws.services.ec2.AmazonEC2;
+import com.amazonaws.services.ec2.model.Address;
+import com.amazonaws.services.ec2.model.DescribeInstanceStatusResult;
+import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
+import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import com.amazonaws.services.ec2.model.Instance;
-import com.amazonaws.services.ec2.model.MonitorInstancesRequest;
+import com.amazonaws.services.ec2.model.InstanceNetworkInterface;
+import com.amazonaws.services.ec2.model.RunInstancesResult;
 
 public class AutoScaler implements Runnable {
 
     private AmazonEC2 ec2;
     private AmazonCloudWatch cloudWatch;
+
     private static final int OBS_TIME_MINUTES = 2;
     private static final int OBS_TIME_MS = 1000 * 60 * OBS_TIME_MINUTES;
     private static final int MIN_VM_AMOUNT = 1; // TODO: Validate that min is less than max
     private static final int MAX_VM_AMOUNT = 3;
+    private static final float DECREASE_VMS_THRESHOLD = 7f;
+    private static final float INCREASE_VMS_THRESHOLD = 25f;
 
     public static Map<String, VM> vms = new ConcurrentHashMap<>();
 
@@ -36,15 +46,21 @@ public class AutoScaler implements Runnable {
             printVMs();
         } catch (Exception e) {
             e.printStackTrace();
+            System.out.println(e);
         }
     }
 
-    private void launchVMsUntilMinimumReached() {
+    private void launchVMsUntilMinimumReached() throws InterruptedException {
         int currentNumOfVMs = vms.values().size();
         int desiredNumOfVMs = MIN_VM_AMOUNT - currentNumOfVMs;
         System.out.println(String.format("Launching %s number of instances", desiredNumOfVMs));
         if (0 < desiredNumOfVMs && desiredNumOfVMs < MAX_VM_AMOUNT) {
-            EC2Utility.runNewInstances(ec2, desiredNumOfVMs);
+            RunInstancesResult res = EC2Utility.runNewInstances(ec2, desiredNumOfVMs);
+
+            for (Instance instance : res.getReservation().getInstances()) {
+                vms.put(instance.getInstanceId(),
+                        new VM(instance.getInstanceId(), null, false, VMState.PENDING));
+            }
         }
     }
 
@@ -56,14 +72,30 @@ public class AutoScaler implements Runnable {
 
                 Dimension instanceDimension = new Dimension();
                 instanceDimension.setName("InstanceId");
-                Double totalAvg = 0.0;
-
                 Set<Instance> instances = EC2Utility.getInstances(ec2);
+
+                Double totalAvg = 0.0;
+                Double highestInstanceAvg = 0.0;
+                String highestInstanceAvgId = "";
+
                 for (Instance instance : instances) {
                     String iid = instance.getInstanceId();
                     String state = instance.getState().getName();
-                    System.out.println(iid);
+
                     if (state.equals("running")) {
+                        System.out.println("Instance " + iid);
+                        VM correspondingVM = vms.get(iid);
+                        boolean vmHasChangedStateSinceLastUpdate = correspondingVM.state == VMState.PENDING;
+                        if (vmHasChangedStateSinceLastUpdate) {
+                            correspondingVM.state = VMState.RUNNING;
+                            correspondingVM.ipAddress = instance.getPublicIpAddress();
+                        }
+                        if (correspondingVM.markedForDeletion
+                                && correspondingVM.currentAmountOfRequests == 0) {
+                            // If it's marked for deletion, we want to check if we can terminate it or not
+                            EC2Utility.terminateInstance(iid, ec2);
+                        }
+
                         instanceDimension.setValue(iid);
                         GetMetricStatisticsRequest request = new GetMetricStatisticsRequest()
                                 .withStartTime(new Date(new Date().getTime() - OBS_TIME_MS))
@@ -74,20 +106,39 @@ public class AutoScaler implements Runnable {
                                 .withDimensions(instanceDimension)
                                 .withEndTime(new Date());
                         System.out.println(cloudWatch.getMetricStatistics(request));
-                        Double instanceAvg = 0.0; // FOR SOME REASON QUERYING FOR JUST 1 MINUTE DOESNT WORK. SO HAVE TO GET SEVERAL DATA POINTS AND DIVIDE. 
+                        Double instanceAvg = 0.0; // FOR SOME REASON QUERYING FOR JUST 1 MINUTE DOESNT WORK. SO HAVE TO
+                        // GET SEVERAL DATA POINTS AND DIVIDE.
                         for (Datapoint dp : cloudWatch.getMetricStatistics(request).getDatapoints()) {
                             instanceAvg += dp.getAverage();
                             System.out.println(" CPU utilization for instance " + iid + " = " + instanceAvg);
                         }
+                        if (instanceAvg > highestInstanceAvg) {
+                            highestInstanceAvg = instanceAvg;
+                            highestInstanceAvgId = iid;
+                        }
                         totalAvg += instanceAvg / OBS_TIME_MINUTES;
-                        System.out.println("Total average: " + totalAvg);
                     }
                 }
+                System.out.println("Total average: " + totalAvg);
+
+                if (totalAvg < DECREASE_VMS_THRESHOLD && getVMsNotMarkedForDeletion().size() > MIN_VM_AMOUNT)
+                    markInstanceForDeletion(highestInstanceAvgId);
+                else if (totalAvg > INCREASE_VMS_THRESHOLD && getVMsNotMarkedForDeletion().size() < MAX_VM_AMOUNT)
+                    EC2Utility.runNewInstance(ec2);
+
                 Thread.sleep(OBS_TIME_MS);
+
             } catch (Exception e) {
                 e.printStackTrace();
+                System.out.println(e);
             }
         }
+    }
+
+    private void markInstanceForDeletion(String highestInstanceAvgId) {
+        if (highestInstanceAvgId != "")
+            vms.get(highestInstanceAvgId).markedForDeletion = true;
+        // Have to let LB know that it's marked for deletion?
     }
 
     private void loadVMsFromAmazon() throws Exception {
@@ -95,8 +146,8 @@ public class AutoScaler implements Runnable {
         for (Instance instance : instances) {
             String id = instance.getInstanceId();
             String ip = instance.getPublicIpAddress();
-            VM vm = new VM(id, ip, false);
-            vms.put(id, vm);
+            if (!vms.containsKey(id) && instance.getState().getName() == "running")
+                vms.put(id, new VM(id, ip, false, VMState.RUNNING));
         }
     }
 
@@ -104,4 +155,9 @@ public class AutoScaler implements Runnable {
         System.out.println("Printing vms: ");
         vms.keySet().stream().forEach(vm -> System.out.println(vms.get(vm)));
     }
+
+    public static List<VM> getVMsNotMarkedForDeletion() {
+        return vms.values().stream().filter(vm -> !vm.markedForDeletion).collect(Collectors.toList());
+    }
+
 }
