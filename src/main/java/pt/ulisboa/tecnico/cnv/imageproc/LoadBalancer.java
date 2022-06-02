@@ -35,8 +35,8 @@ public class LoadBalancer implements HttpHandler {
     int roundRobinIndex = -1;
     String endpoint;
 
-    public LoadBalancer(String endpoint) {
-        ec2 = EC2Utility.getEC2Client();
+    public LoadBalancer(String endpoint, AmazonEC2 ec2) {
+        this.ec2 = ec2;
         this.endpoint = endpoint;
     }
 
