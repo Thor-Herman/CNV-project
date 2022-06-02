@@ -18,7 +18,8 @@ public class AutoScaler implements Runnable {
 
     private AmazonEC2 ec2;
     private AmazonCloudWatch cloudWatch;
-    private static final int OBS_TIME = 1000 * 60;
+    private static final int OBS_TIME_MINUTES = 2;
+    private static final int OBS_TIME_MS = 1000 * 60 * OBS_TIME_MINUTES;
     private static final int MIN_VM_AMOUNT = 1; // TODO: Validate that min is less than max
     private static final int MAX_VM_AMOUNT = 3;
 
@@ -65,7 +66,7 @@ public class AutoScaler implements Runnable {
                     if (state.equals("running")) {
                         instanceDimension.setValue(iid);
                         GetMetricStatisticsRequest request = new GetMetricStatisticsRequest()
-                                .withStartTime(new Date(new Date().getTime() - OBS_TIME))
+                                .withStartTime(new Date(new Date().getTime() - OBS_TIME_MS))
                                 .withNamespace("AWS/EC2")
                                 .withPeriod(60)
                                 .withMetricName("CPUUtilization")
@@ -73,15 +74,16 @@ public class AutoScaler implements Runnable {
                                 .withDimensions(instanceDimension)
                                 .withEndTime(new Date());
                         System.out.println(cloudWatch.getMetricStatistics(request));
+                        Double instanceAvg = 0.0; // FOR SOME REASON QUERYING FOR JUST 1 MINUTE DOESNT WORK. SO HAVE TO GET SEVERAL DATA POINTS AND DIVIDE. 
                         for (Datapoint dp : cloudWatch.getMetricStatistics(request).getDatapoints()) {
-                            Double instanceAvg = dp.getAverage();
+                            instanceAvg += dp.getAverage();
                             System.out.println(" CPU utilization for instance " + iid + " = " + instanceAvg);
-                            totalAvg += instanceAvg;
                         }
+                        totalAvg += instanceAvg / OBS_TIME_MINUTES;
                         System.out.println("Total average: " + totalAvg);
                     }
                 }
-                Thread.sleep(OBS_TIME);
+                Thread.sleep(OBS_TIME_MS);
             } catch (Exception e) {
                 e.printStackTrace();
             }
