@@ -22,7 +22,7 @@ import com.amazonaws.services.ec2.model.DescribeAvailabilityZonesResult;
 public class EC2Utility {
 
     private static String AWS_REGION = "us-east-1";
-    private static String AMI_ID = "ami-0a5dd0179de745d4c";
+    private static String AMI_ID = "ami-0c257fcc56216301f";
     private static String KEY_NAME = "cnv-lab-ssh-1";
     private static String SEC_GROUP_ID = "sg-04e43cb406b45627c";
 
@@ -77,9 +77,11 @@ public class EC2Utility {
     }
 
     public static void terminateInstance(String instanceId, AmazonEC2 ec2) {
+        System.out.println("Terminating instance... " + instanceId);
         TerminateInstancesRequest termInstanceReq = new TerminateInstancesRequest();
         termInstanceReq.withInstanceIds(instanceId);
         ec2.terminateInstances(termInstanceReq);
+        System.out.println("Instance terminated");
     }
 
     public static void printAse(AmazonServiceException ase) {

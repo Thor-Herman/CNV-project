@@ -30,8 +30,8 @@ public class AutoScaler implements Runnable {
     private static final int OBS_TIME_MS = 1000 * 60 * OBS_TIME_MINUTES;
     private static final int MIN_VM_AMOUNT = 1; // TODO: Validate that min is less than max
     private static final int MAX_VM_AMOUNT = 3;
-    private static final float DECREASE_VMS_THRESHOLD = 7f;
-    private static final float INCREASE_VMS_THRESHOLD = 25f;
+    private static final float DECREASE_VMS_THRESHOLD = 3f;
+    private static final float INCREASE_VMS_THRESHOLD = 5;
 
     public static Map<String, VM> vms = new ConcurrentHashMap<>();
 
@@ -55,12 +55,17 @@ public class AutoScaler implements Runnable {
         int desiredNumOfVMs = MIN_VM_AMOUNT - currentNumOfVMs;
         System.out.println(String.format("Launching %s number of instances", desiredNumOfVMs));
         if (0 < desiredNumOfVMs && desiredNumOfVMs < MAX_VM_AMOUNT) {
-            RunInstancesResult res = EC2Utility.runNewInstances(ec2, desiredNumOfVMs);
+            startNewInstances(desiredNumOfVMs);
+        }
+    }
 
-            for (Instance instance : res.getReservation().getInstances()) {
-                vms.put(instance.getInstanceId(),
-                        new VM(instance.getInstanceId(), null, false, VMState.PENDING));
-            }
+    private void startNewInstances(int desiredNumOfVMs) {
+        RunInstancesResult res = EC2Utility.runNewInstances(ec2, desiredNumOfVMs);
+
+        for (Instance instance : res.getReservation().getInstances()) {
+            System.out.println("Started new instance: " + instance.getInstanceId());
+            vms.put(instance.getInstanceId(),
+                    new VM(instance.getInstanceId(), null, false, VMState.PENDING));
         }
     }
 
@@ -105,7 +110,6 @@ public class AutoScaler implements Runnable {
                                 .withStatistics("Average")
                                 .withDimensions(instanceDimension)
                                 .withEndTime(new Date());
-                        System.out.println(cloudWatch.getMetricStatistics(request));
                         Double instanceAvg = 0.0; // FOR SOME REASON QUERYING FOR JUST 1 MINUTE DOESNT WORK. SO HAVE TO
                         // GET SEVERAL DATA POINTS AND DIVIDE.
                         for (Datapoint dp : cloudWatch.getMetricStatistics(request).getDatapoints()) {
@@ -124,7 +128,7 @@ public class AutoScaler implements Runnable {
                 if (totalAvg < DECREASE_VMS_THRESHOLD && getVMsNotMarkedForDeletion().size() > MIN_VM_AMOUNT)
                     markInstanceForDeletion(highestInstanceAvgId);
                 else if (totalAvg > INCREASE_VMS_THRESHOLD && getVMsNotMarkedForDeletion().size() < MAX_VM_AMOUNT)
-                    EC2Utility.runNewInstance(ec2);
+                    startNewInstances(1);
 
                 Thread.sleep(OBS_TIME_MS);
 
@@ -136,8 +140,11 @@ public class AutoScaler implements Runnable {
     }
 
     private void markInstanceForDeletion(String highestInstanceAvgId) {
-        if (highestInstanceAvgId != "")
-            vms.get(highestInstanceAvgId).markedForDeletion = true;
+        if (highestInstanceAvgId != "") {
+            VM vm = vms.get(highestInstanceAvgId);
+            vm.markedForDeletion = true;
+            System.out.println("Marked VM with Id " + vm.id + " for deletion");
+        }
         // Have to let LB know that it's marked for deletion?
     }
 
@@ -146,8 +153,9 @@ public class AutoScaler implements Runnable {
         for (Instance instance : instances) {
             String id = instance.getInstanceId();
             String ip = instance.getPublicIpAddress();
-            if (!vms.containsKey(id) && instance.getState().getName() == "running")
+            if (!vms.containsKey(id) && instance.getState().getName() != "terminated") {
                 vms.put(id, new VM(id, ip, false, VMState.RUNNING));
+            }
         }
     }
 
