@@ -11,7 +11,6 @@ import com.amazonaws.services.cloudwatch.model.Datapoint;
 import com.amazonaws.services.cloudwatch.model.Dimension;
 import com.amazonaws.services.cloudwatch.model.GetMetricStatisticsRequest;
 import com.amazonaws.services.ec2.AmazonEC2;
-import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.MonitorInstancesRequest;
 
@@ -20,6 +19,8 @@ public class AutoScaler implements Runnable {
     private AmazonEC2 ec2;
     private AmazonCloudWatch cloudWatch;
     private static final int OBS_TIME = 1000 * 60;
+    private static final int MIN_VM_AMOUNT = 1; // TODO: Validate that min is less than max
+    private static final int MAX_VM_AMOUNT = 3;
 
     public static Map<String, VM> vms = new ConcurrentHashMap<>();
 
@@ -28,9 +29,21 @@ public class AutoScaler implements Runnable {
         this.cloudWatch = cloudWatch;
         try {
             loadVMsFromAmazon();
+            if (vms.values().size() < MIN_VM_AMOUNT) {
+                launchVMsUntilMinimumReached();
+            }
             printVMs();
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    private void launchVMsUntilMinimumReached() {
+        int currentNumOfVMs = vms.values().size();
+        int desiredNumOfVMs = MIN_VM_AMOUNT - currentNumOfVMs;
+        System.out.println(String.format("Launching %s number of instances", desiredNumOfVMs));
+        if (0 < desiredNumOfVMs && desiredNumOfVMs < MAX_VM_AMOUNT) {
+            EC2Utility.runNewInstances(ec2, desiredNumOfVMs);
         }
     }
 
@@ -38,7 +51,6 @@ public class AutoScaler implements Runnable {
     public void run() {
         while (true) {
             try {
-                Thread.sleep(OBS_TIME);
                 System.out.println("Monitoring...");
 
                 Dimension instanceDimension = new Dimension();
@@ -49,6 +61,7 @@ public class AutoScaler implements Runnable {
                 for (Instance instance : instances) {
                     String iid = instance.getInstanceId();
                     String state = instance.getState().getName();
+                    System.out.println(iid);
                     if (state.equals("running")) {
                         instanceDimension.setValue(iid);
                         GetMetricStatisticsRequest request = new GetMetricStatisticsRequest()
@@ -59,6 +72,7 @@ public class AutoScaler implements Runnable {
                                 .withStatistics("Average")
                                 .withDimensions(instanceDimension)
                                 .withEndTime(new Date());
+                        System.out.println(cloudWatch.getMetricStatistics(request));
                         for (Datapoint dp : cloudWatch.getMetricStatistics(request).getDatapoints()) {
                             Double instanceAvg = dp.getAverage();
                             System.out.println(" CPU utilization for instance " + iid + " = " + instanceAvg);
@@ -67,6 +81,7 @@ public class AutoScaler implements Runnable {
                         System.out.println("Total average: " + totalAvg);
                     }
                 }
+                Thread.sleep(OBS_TIME);
             } catch (Exception e) {
                 e.printStackTrace();
             }

@@ -52,14 +52,21 @@ public class EC2Utility {
     }
 
     public static RunInstancesResult runNewInstance(AmazonEC2 ec2) {
+        return runNewInstances(ec2, 1);
+    }
+
+    public static RunInstancesResult runNewInstances(AmazonEC2 ec2, int numOfInstances) {
+        if (numOfInstances > 5)
+            return new RunInstancesResult(); // Just for security's sake
         System.out.println("Starting a new instance.");
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
         runInstancesRequest.withImageId(AMI_ID)
                 .withInstanceType("t2.micro")
-                .withMinCount(1)
-                .withMaxCount(1)
+                .withMinCount(numOfInstances)
+                .withMaxCount(numOfInstances)
                 .withKeyName(KEY_NAME)
-                .withSecurityGroupIds(SEC_GROUP_ID);
+                .withSecurityGroupIds(SEC_GROUP_ID)
+                .withMonitoring(true);
         RunInstancesResult runInstancesResult = ec2.runInstances(runInstancesRequest);
         return runInstancesResult;
     }
