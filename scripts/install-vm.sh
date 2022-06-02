@@ -6,9 +6,9 @@ source config.sh
 cmd="sudo yum update -y;sudo amazon-linux-extras install java-openjdk11 -y;sudo yum-config-manager --enable rhel-7-server-optional-rpms;sudo yum install java-11-openjdk-devel -y;"
 ssh -o StrictHostKeyChecking=no -i $AWS_EC2_SSH_KEYPAR_PATH ec2-user@$(cat instance.dns) $cmd
 
-# Install web server.
-sudo scp -r -o StrictHostKeyChecking=no -i $AWS_EC2_SSH_KEYPAR_PATH ~/cnv-shared/cnv22-g16/target/imageproc-1.0-SNAPSHOT-jar-with-dependencies.jar ec2-user@$(cat instance.dns):
-sudo scp -o StrictHostKeyChecking=no -i $AWS_EC2_SSH_KEYPAR_PATH ~/lab2/server-config.sh ec2-user@$(cat instance.dns):
+# Install web server. Add GIT_REPO_PATH and SERVER_CONFIG_PATH to config.sh
+sudo scp -r -o StrictHostKeyChecking=no -i $AWS_EC2_SSH_KEYPAR_PATH $GIT_REPO_PATH/target/imageproc-1.0-SNAPSHOT-jar-with-dependencies.jar ec2-user@$(cat instance.dns):
+sudo scp -o StrictHostKeyChecking=no -i $AWS_EC2_SSH_KEYPAR_PATH $SERVER_CONFIG_PATH/server-config.sh ec2-user@$(cat instance.dns):
 
 # Set the JAVA_HOME and PATH variables through the server-config.sh script
 cmd="sudo mv /home/ec2-user/server-config.sh /etc/profile.d/"
