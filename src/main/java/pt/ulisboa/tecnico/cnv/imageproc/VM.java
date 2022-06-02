@@ -15,6 +15,7 @@ public class VM {
 
     @Override
     public String toString() {
-        return id + "  ip:" + ipAddress + "  marked for deletion:" + Boolean.toString(markedForDeletion);
+        return String.format("id:%s  ip:%s  marked for deletion:%s  no. requests:%s", id, ipAddress,
+                Boolean.toString(markedForDeletion), currentAmountOfRequests);
     }
 }
