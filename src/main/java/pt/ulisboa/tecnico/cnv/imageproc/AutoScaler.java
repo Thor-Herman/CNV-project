@@ -30,14 +30,27 @@ public class AutoScaler implements Runnable {
     private static final int OBS_TIME_MS = 1000 * 60 * OBS_TIME_MINUTES;
     private static final int MIN_VM_AMOUNT = 1; // TODO: Validate that min is less than max
     private static final int MAX_VM_AMOUNT = 3;
-    private static final float DECREASE_VMS_THRESHOLD = 3f;
-    private static final float INCREASE_VMS_THRESHOLD = 5;
+    private static final float DECREASE_VMS_THRESHOLD = 3f; // Must be number between 0 and 100;
+    private static final float INCREASE_VMS_THRESHOLD = 5; // Must be number between 0 and 100;
 
     public static Map<String, VM> vms = new ConcurrentHashMap<>();
 
     public AutoScaler(AmazonEC2 ec2, AmazonCloudWatch cloudWatch) {
         this.ec2 = ec2;
         this.cloudWatch = cloudWatch;
+        validateConstants();
+        intiialize();
+    }
+
+    private void validateConstants() {
+        boolean vmAmountsSatisfyConstraints = MIN_VM_AMOUNT >= 0 && MAX_VM_AMOUNT >= MIN_VM_AMOUNT;
+        boolean thresholdsSatisfyConstraints = DECREASE_VMS_THRESHOLD >= 0
+                && INCREASE_VMS_THRESHOLD > DECREASE_VMS_THRESHOLD && INCREASE_VMS_THRESHOLD < 100;
+        if (!vmAmountsSatisfyConstraints && thresholdsSatisfyConstraints)
+            throw new IllegalStateException("AS constants do not satisfy constraints");
+    }
+
+    private void intiialize() {
         try {
             loadVMsFromAmazon();
             if (vms.values().size() < MIN_VM_AMOUNT) {
