@@ -39,7 +39,7 @@ public class AutoScaler implements Runnable {
         this.ec2 = ec2;
         this.cloudWatch = cloudWatch;
         validateConstants();
-        intiialize();
+        initialize();
     }
 
     private void validateConstants() {
@@ -50,7 +50,7 @@ public class AutoScaler implements Runnable {
             throw new IllegalStateException("AS constants do not satisfy constraints");
     }
 
-    private void intiialize() {
+    private void initialize() {
         try {
             loadVMsFromAmazon();
             if (vms.values().size() < MIN_VM_AMOUNT) {
@@ -65,20 +65,21 @@ public class AutoScaler implements Runnable {
 
     private void launchVMsUntilMinimumReached() throws InterruptedException {
         int currentNumOfVMs = vms.values().size();
-        int desiredNumOfVMs = MIN_VM_AMOUNT - currentNumOfVMs;
-        System.out.println(String.format("Launching %s number of instances", desiredNumOfVMs));
-        if (0 < desiredNumOfVMs && desiredNumOfVMs < MAX_VM_AMOUNT) {
-            startNewInstances(desiredNumOfVMs);
+        int numOfVMsToStart = MIN_VM_AMOUNT - currentNumOfVMs;
+        System.out.println(String.format("Launching %s number of instances", numOfVMsToStart));
+        if (0 < numOfVMsToStart && numOfVMsToStart + currentNumOfVMs < MAX_VM_AMOUNT) {
+            startNewInstances(numOfVMsToStart);
         }
     }
 
-    private void startNewInstances(int desiredNumOfVMs) {
-        RunInstancesResult res = EC2Utility.runNewInstances(ec2, desiredNumOfVMs);
+    private void startNewInstances(int numOfVMsToStart) {
+        RunInstancesResult res = EC2Utility.runNewInstances(ec2, numOfVMsToStart);
 
         for (Instance instance : res.getReservation().getInstances()) {
-            System.out.println("Started new instance: " + instance.getInstanceId());
-            vms.put(instance.getInstanceId(),
-                    new VM(instance.getInstanceId(), null, false, VMState.PENDING));
+            String iid = instance.getInstanceId();
+            System.out.println("Started new instance: " + iid);
+            vms.put(iid,
+                    new VM(iid, null, false, VMState.PENDING));
         }
     }
 
@@ -88,8 +89,7 @@ public class AutoScaler implements Runnable {
             try {
                 System.out.println("Monitoring...");
 
-                Dimension instanceDimension = new Dimension();
-                instanceDimension.setName("InstanceId");
+                Dimension instanceDimension = getInstanceDimension();
                 Set<Instance> instances = EC2Utility.getInstances(ec2);
 
                 Double totalAvg = 0.0;
@@ -97,51 +97,15 @@ public class AutoScaler implements Runnable {
                 String highestInstanceAvgId = "";
 
                 for (Instance instance : instances) {
-                    String iid = instance.getInstanceId();
-                    String state = instance.getState().getName();
-
-                    if (state.equals("running")) {
-                        System.out.println("Instance " + iid);
-                        VM correspondingVM = vms.get(iid);
-                        boolean vmHasChangedStateSinceLastUpdate = correspondingVM.state == VMState.PENDING;
-                        if (vmHasChangedStateSinceLastUpdate) {
-                            correspondingVM.state = VMState.RUNNING;
-                            correspondingVM.ipAddress = instance.getPublicIpAddress();
-                        }
-                        if (correspondingVM.markedForDeletion
-                                && correspondingVM.currentAmountOfRequests == 0) {
-                            // If it's marked for deletion, we want to check if we can terminate it or not
-                            EC2Utility.terminateInstance(iid, ec2);
-                        }
-
-                        instanceDimension.setValue(iid);
-                        GetMetricStatisticsRequest request = new GetMetricStatisticsRequest()
-                                .withStartTime(new Date(new Date().getTime() - OBS_TIME_MS))
-                                .withNamespace("AWS/EC2")
-                                .withPeriod(60)
-                                .withMetricName("CPUUtilization")
-                                .withStatistics("Average")
-                                .withDimensions(instanceDimension)
-                                .withEndTime(new Date());
-                        Double instanceAvg = 0.0; // FOR SOME REASON QUERYING FOR JUST 1 MINUTE DOESNT WORK. SO HAVE TO
-                        // GET SEVERAL DATA POINTS AND DIVIDE.
-                        for (Datapoint dp : cloudWatch.getMetricStatistics(request).getDatapoints()) {
-                            instanceAvg += dp.getAverage();
-                            System.out.println(" CPU utilization for instance " + iid + " = " + instanceAvg);
-                        }
-                        if (instanceAvg > highestInstanceAvg) {
-                            highestInstanceAvg = instanceAvg;
-                            highestInstanceAvgId = iid;
-                        }
-                        totalAvg += instanceAvg / OBS_TIME_MINUTES;
+                    Double instanceAvg = processInstanceInRoutine(instance, instanceDimension);
+                    if (instanceAvg > highestInstanceAvg) {
+                        highestInstanceAvg = instanceAvg;
+                        highestInstanceAvgId = instance.getInstanceId();
                     }
+                    totalAvg += instanceAvg / OBS_TIME_MINUTES;
                 }
                 System.out.println("Total average: " + totalAvg);
-
-                if (totalAvg < DECREASE_VMS_THRESHOLD && getVMsNotMarkedForDeletion().size() > MIN_VM_AMOUNT)
-                    markInstanceForDeletion(highestInstanceAvgId);
-                else if (totalAvg > INCREASE_VMS_THRESHOLD && getVMsNotMarkedForDeletion().size() < MAX_VM_AMOUNT)
-                    startNewInstances(1);
+                scaleVMsAccordingly(totalAvg, highestInstanceAvgId);
 
                 Thread.sleep(OBS_TIME_MS);
 
@@ -152,11 +116,86 @@ public class AutoScaler implements Runnable {
         }
     }
 
+    private Double processInstanceInRoutine(Instance instance, Dimension instanceDimension) {
+        String iid = instance.getInstanceId();
+        String state = instance.getState().getName();
+        Double instanceAvg = 0.0;
+
+        if (state.equals("running")) {
+            System.out.println("Instance " + iid);
+            VM correspondingVM = vms.get(iid);
+            checkAndHandleChangedStateSinceLastUpdate(instance, correspondingVM);
+            checkAndHandleMarkedForDeletion(iid, correspondingVM);
+
+            instanceDimension.setValue(iid);
+            instanceAvg = getInstanceAvg(iid, instanceDimension);
+        }
+        return instanceAvg;
+    }
+
+    private void scaleVMsAccordingly(Double totalAvg, String highestInstanceAvgId) {
+        if (totalAvg < DECREASE_VMS_THRESHOLD && getVMsNotMarkedForDeletion().size() > MIN_VM_AMOUNT)
+            markInstanceForDeletion(highestInstanceAvgId);
+        else if (totalAvg > INCREASE_VMS_THRESHOLD && getVMsNotMarkedForDeletion().size() < MAX_VM_AMOUNT)
+            startNewInstances(1);
+    }
+
+    private Dimension getInstanceDimension() {
+        Dimension instanceDimension = new Dimension();
+        instanceDimension.setName("InstanceId");
+        return instanceDimension;
+    }
+
+    private Double getInstanceAvg(String iid, Dimension instanceDimension) {
+        GetMetricStatisticsRequest request = createMetricsStatisticsRequest(instanceDimension);
+        Double instanceAvg = 0.0; // FOR SOME REASON QUERYING FOR JUST 1 MINUTE DOESNT WORK. SO HAVE TO
+        // GET SEVERAL DATA POINTS AND DIVIDE.
+        for (Datapoint dp : cloudWatch.getMetricStatistics(request).getDatapoints()) {
+            instanceAvg += dp.getAverage();
+            System.out.println(" CPU utilization for instance " + iid + " = " + instanceAvg);
+        }
+
+        return instanceAvg;
+    }
+
+    private void checkAndHandleChangedStateSinceLastUpdate(Instance instance, VM correspondingVM) {
+        boolean vmHasChangedStateSinceLastUpdate = correspondingVM.state == VMState.PENDING;
+        if (vmHasChangedStateSinceLastUpdate) {
+            correspondingVM.state = VMState.RUNNING;
+            correspondingVM.ipAddress = instance.getPublicIpAddress();
+        }
+    }
+
+    private void checkAndHandleMarkedForDeletion(String iid, VM correspondingVM) {
+        boolean canShutDownVM = correspondingVM.markedForDeletion
+                && correspondingVM.currentAmountOfRequests == 0;
+        if (canShutDownVM) {
+            EC2Utility.terminateInstance(iid, ec2);
+            correspondingVM.state = VMState.TERMINATED;
+        }
+    }
+
+    private GetMetricStatisticsRequest createMetricsStatisticsRequest(Dimension instanceDimension) {
+        GetMetricStatisticsRequest request = new GetMetricStatisticsRequest()
+                .withStartTime(new Date(new Date().getTime() - OBS_TIME_MS))
+                .withNamespace("AWS/EC2")
+                .withPeriod(60)
+                .withMetricName("CPUUtilization")
+                .withStatistics("Average")
+                .withDimensions(instanceDimension)
+                .withEndTime(new Date());
+        return request;
+    }
+
     private void markInstanceForDeletion(String highestInstanceAvgId) {
         if (highestInstanceAvgId != "") {
             VM vm = vms.get(highestInstanceAvgId);
-            vm.markedForDeletion = true;
-            System.out.println("Marked VM with Id " + vm.id + " for deletion");
+            if (vm != null) {
+                vm.markedForDeletion = true;
+                System.out.println("Marked VM with Id " + vm.id + " for deletion");
+            } else
+                System.out.println(
+                        "Tried to get VM with highestInstanceAvg of " + highestInstanceAvgId + " but got null");
         }
         // Have to let LB know that it's marked for deletion?
     }
@@ -164,10 +203,10 @@ public class AutoScaler implements Runnable {
     private void loadVMsFromAmazon() throws Exception {
         List<Instance> instances = EC2Utility.getRunningInstances(ec2);
         for (Instance instance : instances) {
-            String id = instance.getInstanceId();
+            String iid = instance.getInstanceId();
             String ip = instance.getPublicIpAddress();
-            if (!vms.containsKey(id) && instance.getState().getName() != "terminated") {
-                vms.put(id, new VM(id, ip, false, VMState.RUNNING));
+            if (!vms.containsKey(iid) && instance.getState().getName() != "terminated") {
+                vms.put(iid, new VM(iid, ip, false, VMState.RUNNING));
             }
         }
     }
