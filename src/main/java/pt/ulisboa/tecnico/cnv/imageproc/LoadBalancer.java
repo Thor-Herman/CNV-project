@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
 
@@ -53,11 +54,11 @@ public class LoadBalancer implements HttpHandler {
 
     private void handleRequest(HttpExchange t) throws IOException {
         try {
-            VM vm = getNextVM();
-            vm.currentAmountOfRequests++;
+            // VM vm = getNextVM();
+            // vm.currentAmountOfRequests++;
             // String response = forwardRequest(t, vm.ipAddress);
             String response = launchLambda(t);
-            vm.currentAmountOfRequests--;
+            // vm.currentAmountOfRequests--;
             // System.out.println(response);
             returnResponse(t, response);
         } catch (Exception e) {
@@ -75,14 +76,17 @@ public class LoadBalancer implements HttpHandler {
     private String launchLambda(HttpExchange t) throws IOException {
         LambdaClient awsLambda = LambdaClient.builder()
                 .credentialsProvider(EnvironmentVariableCredentialsProvider.create()).build();
-        String body = IOUtils.toString(t.getRequestBody(), StandardCharsets.UTF_8);
-        String json = String.format("{\"fileFormat\":\"jpg\", \"body\":\"%s\"}", body);
+        String result = new BufferedReader(new InputStreamReader(t.getRequestBody())).lines().collect(Collectors.joining("\n"));
+        String[] resultSplits = result.split(",");
+        String format = resultSplits[0].split("/")[1].split(";")[0];
+        String json = String.format("{\"fileFormat\":\"%s\", \"body\":\"%s\"}", format, resultSplits[1]);
         SdkBytes payload = SdkBytes.fromUtf8String(json);
-        InvokeRequest request = InvokeRequest.builder().functionName("fg-" + endpoint).payload(payload).build();
+        InvokeRequest request = InvokeRequest.builder().functionName(endpoint.substring(1)).payload(payload).build();
         InvokeResponse res = awsLambda.invoke(request);
         String value = res.payload().asUtf8String();
         awsLambda.close();
-        return value;
+        System.out.println(value);
+        return value.substring(1, value.length() - 1);
     }
 
     private String forwardRequest(HttpExchange t, String ip) throws Exception {
