@@ -10,6 +10,8 @@ import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.EnvironmentVariableCredentialsProvider;
 import com.amazonaws.services.cloudwatch.AmazonCloudWatch;
 import com.amazonaws.services.cloudwatch.AmazonCloudWatchClientBuilder;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
@@ -36,6 +38,13 @@ public class EC2Utility {
         AmazonCloudWatch cloudWatch = AmazonCloudWatchClientBuilder.standard().withRegion(AWS_REGION)
                 .withCredentials(new EnvironmentVariableCredentialsProvider()).build();
         return cloudWatch;
+    }
+
+    public static AmazonDynamoDB getDynamoDB() {
+        return AmazonDynamoDBClientBuilder.standard()
+                .withCredentials(new EnvironmentVariableCredentialsProvider())
+                .withRegion(AWS_REGION)
+                .build();
     }
 
     public static Set<Instance> getInstances(AmazonEC2 ec2) throws Exception {
