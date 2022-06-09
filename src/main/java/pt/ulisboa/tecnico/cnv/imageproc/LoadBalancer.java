@@ -74,19 +74,26 @@ public class LoadBalancer implements HttpHandler {
     }
 
     private String launchLambda(HttpExchange t) throws IOException {
+        System.out.println("Launching lambda...");
         LambdaClient awsLambda = LambdaClient.builder()
                 .credentialsProvider(EnvironmentVariableCredentialsProvider.create()).build();
-        String result = new BufferedReader(new InputStreamReader(t.getRequestBody())).lines().collect(Collectors.joining("\n"));
-        String[] resultSplits = result.split(",");
-        String format = resultSplits[0].split("/")[1].split(";")[0];
-        String json = String.format("{\"fileFormat\":\"%s\", \"body\":\"%s\"}", format, resultSplits[1]);
-        SdkBytes payload = SdkBytes.fromUtf8String(json);
+        SdkBytes payload = getLambdaPayload(t.getRequestBody());
         InvokeRequest request = InvokeRequest.builder().functionName(endpoint.substring(1)).payload(payload).build();
         InvokeResponse res = awsLambda.invoke(request);
         String value = res.payload().asUtf8String();
         awsLambda.close();
         System.out.println(value);
         return value.substring(1, value.length() - 1);
+    }
+
+    private SdkBytes getLambdaPayload(InputStream requestBody) {
+        String result = new BufferedReader(new InputStreamReader(requestBody)).lines()
+                .collect(Collectors.joining("\n"));
+        String[] resultSplits = result.split(",");
+        String format = resultSplits[0].split("/")[1].split(";")[0];
+        String json = String.format("{\"fileFormat\":\"%s\", \"body\":\"%s\"}", format, resultSplits[1]);
+        SdkBytes payload = SdkBytes.fromUtf8String(json);
+        return payload;
     }
 
     private String forwardRequest(HttpExchange t, String ip) throws Exception {
