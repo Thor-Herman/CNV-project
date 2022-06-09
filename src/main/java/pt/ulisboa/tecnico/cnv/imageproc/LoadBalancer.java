@@ -15,15 +15,25 @@ import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import org.apache.commons.io.IOUtils;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.model.Instance;
 
 import com.sun.net.httpserver.HttpServer;
+
+import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
+import software.amazon.awssdk.core.SdkBytes;
+import software.amazon.awssdk.services.lambda.LambdaClient;
+import software.amazon.awssdk.services.lambda.model.InvokeRequest;
+import software.amazon.awssdk.services.lambda.model.InvokeResponse;
+
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.Headers;
@@ -44,9 +54,9 @@ public class LoadBalancer implements HttpHandler {
     private void handleRequest(HttpExchange t) throws IOException {
         try {
             VM vm = getNextVM();
-            vm.currentAmountOfRequests++; // TODO: How can this ever increase past 1? The loadbalancer waits for the
-                                          // result
-            String response = forwardRequest(t, vm.ipAddress);
+            vm.currentAmountOfRequests++;
+            // String response = forwardRequest(t, vm.ipAddress);
+            String response = launchLambda(t);
             vm.currentAmountOfRequests--;
             // System.out.println(response);
             returnResponse(t, response);
@@ -60,6 +70,19 @@ public class LoadBalancer implements HttpHandler {
         List<VM> vms = AutoScaler.getVMsRunning();
         roundRobinIndex = roundRobinIndex >= vms.size() - 1 ? 0 : roundRobinIndex + 1;
         return vms.get(roundRobinIndex);
+    }
+
+    private String launchLambda(HttpExchange t) throws IOException {
+        LambdaClient awsLambda = LambdaClient.builder()
+                .credentialsProvider(EnvironmentVariableCredentialsProvider.create()).build();
+        String body = IOUtils.toString(t.getRequestBody(), StandardCharsets.UTF_8);
+        String json = String.format("{\"fileFormat\":\"jpg\", \"body\":\"%s\"}", body);
+        SdkBytes payload = SdkBytes.fromUtf8String(json);
+        InvokeRequest request = InvokeRequest.builder().functionName("fg-" + endpoint).payload(payload).build();
+        InvokeResponse res = awsLambda.invoke(request);
+        String value = res.payload().asUtf8String();
+        awsLambda.close();
+        return value;
     }
 
     private String forwardRequest(HttpExchange t, String ip) throws Exception {
