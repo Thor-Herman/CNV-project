@@ -44,7 +44,8 @@ public class LoadBalancer implements HttpHandler {
     private void handleRequest(HttpExchange t) throws IOException {
         try {
             VM vm = getNextVM();
-            vm.currentAmountOfRequests++; // TODO: How can this ever increase past 1? The loadbalancer waits for the result
+            vm.currentAmountOfRequests++; // TODO: How can this ever increase past 1? The loadbalancer waits for the
+                                          // result
             String response = forwardRequest(t, vm.ipAddress);
             vm.currentAmountOfRequests--;
             // System.out.println(response);
@@ -56,7 +57,7 @@ public class LoadBalancer implements HttpHandler {
     }
 
     private VM getNextVM() {
-        List<VM> vms = AutoScaler.getVMsNotMarkedForDeletion();
+        List<VM> vms = AutoScaler.getVMsRunning();
         roundRobinIndex = roundRobinIndex >= vms.size() - 1 ? 0 : roundRobinIndex + 1;
         return vms.get(roundRobinIndex);
     }

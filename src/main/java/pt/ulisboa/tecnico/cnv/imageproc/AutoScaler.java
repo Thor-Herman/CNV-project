@@ -220,4 +220,7 @@ public class AutoScaler implements Runnable {
         return vms.values().stream().filter(vm -> !vm.markedForDeletion).collect(Collectors.toList());
     }
 
+    public static List<VM> getVMsRunning() {
+        return vms.values().stream().filter(vm -> vm.state == VMState.RUNNING).collect(Collectors.toList());
+    }
 }
