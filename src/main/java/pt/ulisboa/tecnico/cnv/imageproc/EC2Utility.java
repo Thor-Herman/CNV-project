@@ -24,9 +24,9 @@ import com.amazonaws.services.ec2.model.DescribeAvailabilityZonesResult;
 public class EC2Utility {
 
     private static String AWS_REGION = "us-east-1";
-    private static String AMI_ID = "ami-0c257fcc56216301f";
-    private static String KEY_NAME = "cnv-lab-ssh-1";
-    private static String SEC_GROUP_ID = "sg-04e43cb406b45627c";
+    private static String AMI_ID = "ami-04345f610f116005a";
+    private static String KEY_NAME = "hotmail-key-pair";
+    private static String SEC_GROUP_ID = "sg-001eff3da8fe18a42";
 
     public static AmazonEC2 getEC2Client() {
         AmazonEC2 ec2 = AmazonEC2ClientBuilder.standard().withRegion(AWS_REGION)
