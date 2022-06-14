@@ -54,17 +54,25 @@ public class LoadBalancer implements HttpHandler {
 
     private void handleRequest(HttpExchange t) throws IOException {
         try {
-            // VM vm = getNextVM();
-            // vm.currentAmountOfRequests++;
-            // String response = forwardRequest(t, vm.ipAddress);
-            String response = launchLambda(t);
-            // vm.currentAmountOfRequests--;
-            // System.out.println(response);
+            String response = getAreAllVMsBusy() ? launchLambda(t) : sendReqToVM(t);
+            System.out.println(response);
             returnResponse(t, response);
         } catch (Exception e) {
             System.out.println(e);
             return;
         }
+    }
+
+    private boolean getAreAllVMsBusy() {
+        return AutoScaler.vms.values().stream().allMatch(vm -> vm.currentAmountOfRequests > 0);
+    }
+
+    private String sendReqToVM(HttpExchange t) throws Exception {
+        VM vm = getNextVM();
+        vm.currentAmountOfRequests++;
+        String response = forwardRequest(t, vm.ipAddress);
+        vm.currentAmountOfRequests--;
+        return response;
     }
 
     private VM getNextVM() {
