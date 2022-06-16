@@ -31,7 +31,7 @@ public class AutoScaler implements Runnable {
     private static final int MIN_VM_AMOUNT = 1;
     private static final int MAX_VM_AMOUNT = 3;
     private static final float DECREASE_VMS_THRESHOLD = 3f; // Must be number between 0 and 100;
-    private static final float INCREASE_VMS_THRESHOLD = 20; // Must be number between 0 and 100;
+    private static final float INCREASE_VMS_THRESHOLD = 95f; // Must be number between 0 and 100;
 
     private final String ipOfThisVM;
 
