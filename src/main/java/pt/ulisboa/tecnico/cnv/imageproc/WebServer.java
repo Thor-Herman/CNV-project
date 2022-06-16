@@ -11,6 +11,7 @@ public class WebServer {
         server.createContext("/enhanceimage", new EnhanceImageHandler());
         server.createContext("/detectqrcode", new DetectQrCodeHandler());
         server.createContext("/classifyimage", new ImageClassificationHandler());
+        server.createContext("/healthcheck", new HealthCheck());
         server.start();
     }
 }

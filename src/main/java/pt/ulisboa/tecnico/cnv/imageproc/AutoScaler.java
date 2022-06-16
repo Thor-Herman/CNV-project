@@ -1,5 +1,10 @@
 package pt.ulisboa.tecnico.cnv.imageproc;
 
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +37,7 @@ public class AutoScaler implements Runnable {
     private static final int MAX_VM_AMOUNT = 3;
     private static final float DECREASE_VMS_THRESHOLD = 3f; // Must be number between 0 and 100;
     private static final float INCREASE_VMS_THRESHOLD = 95f; // Must be number between 0 and 100;
+    private static final int HEALTH_CHECK_FREQUENCY = 3;
 
     private final String ipOfThisVM;
 
@@ -102,12 +108,15 @@ public class AutoScaler implements Runnable {
                 for (Instance instance : instances) {
                     if (ipOfThisVM.equals(instance.getPublicIpAddress()))
                         continue;
-                    Double instanceAvg = processInstanceInRoutine(instance, instanceDimension);
-                    if (instanceAvg > highestInstanceAvg) {
-                        highestInstanceAvg = instanceAvg;
-                        highestInstanceAvgId = instance.getInstanceId();
+                    boolean healthyVM = healthCheckInstance(instance);
+                    if (healthyVM) {
+                        Double instanceAvg = processInstanceInRoutine(instance, instanceDimension);
+                        if (instanceAvg > highestInstanceAvg) {
+                            highestInstanceAvg = instanceAvg;
+                            highestInstanceAvgId = instance.getInstanceId();
+                        }
+                        totalAvg += instanceAvg / OBS_TIME_MINUTES;
                     }
-                    totalAvg += instanceAvg / OBS_TIME_MINUTES;
                 }
                 System.out.println("Total average: " + totalAvg);
                 scaleVMsAccordingly(totalAvg, highestInstanceAvgId);
@@ -119,6 +128,32 @@ public class AutoScaler implements Runnable {
                 System.out.println(e);
             }
         }
+    }
+
+    private boolean healthCheckInstance(Instance instance) {
+        VM vm = vms.get(instance.getInstanceId());
+        if (vm.cyclesSinceHealthCheck >= HEALTH_CHECK_FREQUENCY) {
+            return sendHealthCheckAndReturnResponse(instance);
+        } else {
+            vm.cyclesSinceHealthCheck++;
+            return true;
+        }
+    }
+
+    private boolean sendHealthCheckAndReturnResponse(Instance instance) {
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://" + instance.getPublicIpAddress() + ":" + 8000 + "/healthcheck"))
+                .GET()
+                .build();
+        System.out.println(request);
+        int statusCode;
+        try {
+            statusCode = client.send(request, HttpResponse.BodyHandlers.ofString()).statusCode();
+        } catch (Exception e) {
+            return false;
+        }
+        return statusCode == 200;
     }
 
     private Double processInstanceInRoutine(Instance instance, Dimension instanceDimension) {

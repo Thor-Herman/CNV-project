@@ -6,6 +6,7 @@ public class VM {
     public String id;
     public int currentAmountOfRequests;
     public VMState state;
+    public int cyclesSinceHealthCheck;
 
     public VM(String id, String ipAddress, boolean markedForDeletion, VMState state) {
         this.id = id;
@@ -13,6 +14,7 @@ public class VM {
         this.ipAddress = ipAddress;
         this.currentAmountOfRequests = 0; // TODO: This is not necessarily true if the autoscaler is started later
         this.state = state;
+        this.cyclesSinceHealthCheck = 0;
     }
 
     @Override
