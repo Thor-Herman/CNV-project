@@ -28,16 +28,19 @@ public class AutoScaler implements Runnable {
 
     private static final int OBS_TIME_MINUTES = 2;
     private static final int OBS_TIME_MS = 1000 * 60 * OBS_TIME_MINUTES;
-    private static final int MIN_VM_AMOUNT = 1; // TODO: Validate that min is less than max
+    private static final int MIN_VM_AMOUNT = 1;
     private static final int MAX_VM_AMOUNT = 3;
     private static final float DECREASE_VMS_THRESHOLD = 3f; // Must be number between 0 and 100;
     private static final float INCREASE_VMS_THRESHOLD = 20; // Must be number between 0 and 100;
 
+    private final String ipOfThisVM;
+
     public static Map<String, VM> vms = new ConcurrentHashMap<>();
 
-    public AutoScaler(AmazonEC2 ec2, AmazonCloudWatch cloudWatch) {
+    public AutoScaler(AmazonEC2 ec2, AmazonCloudWatch cloudWatch, String ipOfThisVM) {
         this.ec2 = ec2;
         this.cloudWatch = cloudWatch;
+        this.ipOfThisVM = ipOfThisVM;
         validateConstants();
         initialize();
     }
@@ -97,6 +100,8 @@ public class AutoScaler implements Runnable {
                 String highestInstanceAvgId = "";
 
                 for (Instance instance : instances) {
+                    if (ipOfThisVM.equals(instance.getPublicIpAddress()))
+                        continue;
                     Double instanceAvg = processInstanceInRoutine(instance, instanceDimension);
                     if (instanceAvg > highestInstanceAvg) {
                         highestInstanceAvg = instanceAvg;
@@ -205,6 +210,8 @@ public class AutoScaler implements Runnable {
         for (Instance instance : instances) {
             String iid = instance.getInstanceId();
             String ip = instance.getPublicIpAddress();
+            if (ip.equals(ipOfThisVM))
+                continue;
             if (!vms.containsKey(iid) && instance.getState().getName() != "terminated") {
                 vms.put(iid, new VM(iid, ip, false, VMState.RUNNING));
             }
