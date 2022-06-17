@@ -40,13 +40,6 @@ public class EC2Utility {
         return cloudWatch;
     }
 
-    public static AmazonDynamoDB getDynamoDB() {
-        return AmazonDynamoDBClientBuilder.standard()
-                .withCredentials(new EnvironmentVariableCredentialsProvider())
-                .withRegion(AWS_REGION)
-                .build();
-    }
-
     public static Set<Instance> getInstances(AmazonEC2 ec2) throws Exception {
         Set<Instance> instances = new HashSet<Instance>();
         for (Reservation reservation : ec2.describeInstances().getReservations()) {
