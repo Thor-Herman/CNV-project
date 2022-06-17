@@ -2,6 +2,7 @@ package pt.ulisboa.tecnico.cnv.imageproc;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
@@ -40,15 +41,17 @@ public class DynamoDBUtil {
                 .build();
     }
 
-    public static void createNewTable(AmazonDynamoDB dynamoDB, String tableName, String primaryKey) {
+    public static void createNewTable(AmazonDynamoDB dynamoDB, String tableName, String primaryKey)
+            throws TableNeverTransitionedToStateException, InterruptedException {
         CreateTableRequest createTableRequest = new CreateTableRequest().withTableName(tableName)
-                .withKeySchema(new KeySchemaElement().withAttributeName("threadId").withKeyType(KeyType.HASH))
+                .withKeySchema(new KeySchemaElement().withAttributeName(primaryKey).withKeyType(KeyType.HASH))
                 .withAttributeDefinitions(
-                        new AttributeDefinition().withAttributeName("threadId")
+                        new AttributeDefinition().withAttributeName(primaryKey)
                                 .withAttributeType(ScalarAttributeType.S))
                 .withProvisionedThroughput(
                         new ProvisionedThroughput().withReadCapacityUnits(1L).withWriteCapacityUnits(1L));
         TableUtils.createTableIfNotExists(dynamoDB, createTableRequest);
+        describeTable(dynamoDB, tableName);
     }
 
     public static void describeTable(AmazonDynamoDB dynamoDB, String tableName)
@@ -59,10 +62,10 @@ public class DynamoDBUtil {
         System.out.println("Table Description: " + tableDescription);
     }
 
-    public static void putNewResult(AmazonDynamoDB dynamoDB, String tableName, String threadId, long resolution,
+    public static void putNewResult(AmazonDynamoDB dynamoDB, String tableName, UUID id, long resolution,
             long basicblocks) {
-        dynamoDB.putItem(new PutItemRequest(tableName,
-                newItem("1", 3000, 403240324)));
+        PutItemResult result = dynamoDB.putItem(new PutItemRequest(tableName, newItem(id, resolution, basicblocks)));
+        System.out.println(result);
     }
 
     public static void filterDBForResolution(AmazonDynamoDB dynamoDB, String tableName, long gtValue, long ltValue) {
@@ -95,11 +98,11 @@ public class DynamoDBUtil {
         System.out.println("Error Message: " + ace.getMessage());
     }
 
-    private static Map<String, AttributeValue> newItem(String threadId, long res, long bbs) {
+    private static Map<String, AttributeValue> newItem(UUID id, long resolution, long bbls) {
         Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
-        item.put("threadId", new AttributeValue(threadId));
-        item.put("res", new AttributeValue().withN(Long.toString(res)));
-        item.put("bbs", new AttributeValue().withN(Long.toString(bbs)));
+        item.put("id", new AttributeValue(id.toString()));
+        item.put("resolution", new AttributeValue(Long.toString(resolution)));
+        item.put("bbls", new AttributeValue().withN(Long.toString(bbls)));
         return item;
     }
 
