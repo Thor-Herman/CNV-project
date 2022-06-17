@@ -68,17 +68,19 @@ public class DynamoDBUtil {
         System.out.println(result);
     }
 
-    public static void filterDBForResolution(AmazonDynamoDB dynamoDB, String tableName, long gtValue, long ltValue) {
+    public static ScanResult filterDBForResolution(AmazonDynamoDB dynamoDB, String tableName, long gtValue,
+            long ltValue) {
         HashMap<String, Condition> scanFilter = new HashMap<String, Condition>();
         Condition condition = new Condition()
                 .withComparisonOperator(ComparisonOperator.GT.toString())
                 .withAttributeValueList(new AttributeValue().withN(Long.toString(gtValue)))
                 .withComparisonOperator(ComparisonOperator.LT.toString())
                 .withAttributeValueList(new AttributeValue().withN(Long.toString(ltValue)));
-        scanFilter.put("res", condition);
+        scanFilter.put("resolution", condition);
         ScanRequest scanRequest = new ScanRequest(tableName).withScanFilter(scanFilter);
         ScanResult scanResult = dynamoDB.scan(scanRequest);
         System.out.println("Result: " + scanResult);
+        return scanResult;
     }
 
     public static void printASE(AmazonServiceException ase) {

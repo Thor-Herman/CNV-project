@@ -2,6 +2,7 @@ package pt.ulisboa.tecnico.cnv.imageproc;
 
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -17,13 +18,20 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
+
+import javax.imageio.ImageIO;
 
 import org.apache.commons.io.IOUtils;
 
 import com.amazonaws.AmazonServiceException;
+import com.amazonaws.services.dynamodbv2.document.Attribute;
+import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import com.amazonaws.services.dynamodbv2.model.ScanResult;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.model.Instance;
 
@@ -46,6 +54,7 @@ public class LoadBalancer implements HttpHandler {
 
     int roundRobinIndex = -1;
     String endpoint;
+    public static float pixelsThresholdPercentage = 0.05f;
 
     public LoadBalancer(String endpoint, AmazonEC2 ec2) {
         this.ec2 = ec2;
@@ -54,7 +63,14 @@ public class LoadBalancer implements HttpHandler {
 
     private void handleRequest(HttpExchange t) throws IOException {
         try {
+
+            long pixels = getPixelsFromHttpExchange(t);
+            long estimatedBBLs = estimateBBLs(pixels);
+
+            System.out.println("ESTIMATED BBLS FOR PIXELS " + pixels + ": " + estimatedBBLs);
+
             String response = getAreAllVMsBusy() ? launchLambda(t) : sendReqToVM(t);
+            
             System.out.println(response);
             returnResponse(t, response);
         } catch (Exception e) {
@@ -119,6 +135,45 @@ public class LoadBalancer implements HttpHandler {
         OutputStream os = t.getResponseBody();
         os.write(response.getBytes());
         os.close();
+    }
+
+    public static long getPixelsFromHttpExchange(HttpExchange t) {
+        InputStream stream = t.getRequestBody();
+        String result = new BufferedReader(new InputStreamReader(stream)).lines().collect(Collectors.joining("\n"));
+        String[] resultSplits = result.split(",");
+        byte[] decoded = Base64.getDecoder().decode(resultSplits[1]);
+        ByteArrayInputStream bais = new ByteArrayInputStream(decoded);
+        BufferedImage bi;
+        try {
+            bi = ImageIO.read(bais);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return -1;
+        }
+        long pixels = bi.getWidth() * bi.getHeight();
+        return pixels;
+    }
+
+    private long estimateBBLs(long pixels) {
+        long gtValue = Math.round(pixels * (1 + pixelsThresholdPercentage));
+        long ltValue = Math.round(pixels * (1 - pixelsThresholdPercentage));
+
+        ScanResult result = DynamoDBUtil.filterDBForResolution(DynamoDBUtil.getDynamoDB(), "vms2", gtValue, ltValue);
+
+        long totalValue = 0;
+        long totalHits = 0;
+
+        for (Map<String, AttributeValue> match : result.getItems()) {
+            totalValue = match.values().stream()
+                    .map(x -> x.getN())
+                    .mapToLong(Long::parseLong)
+                    .sum();
+            totalHits = match.size();
+        }
+
+        long estimate = Math.round(totalValue / totalHits);
+
+        return estimate;
     }
 
     @Override
