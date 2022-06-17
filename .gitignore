@@ -3,3 +3,7 @@ target
 *.pem
 config.sh
 .vscode
+instance.id
+instance.dns
+javassist-results.txt
+output.json
