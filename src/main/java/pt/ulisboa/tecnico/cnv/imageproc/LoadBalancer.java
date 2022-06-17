@@ -70,7 +70,7 @@ public class LoadBalancer implements HttpHandler {
             System.out.println("ESTIMATED BBLS FOR PIXELS " + pixels + ": " + estimatedBBLs);
 
             String response = getAreAllVMsBusy() ? launchLambda(t) : sendReqToVM(t);
-            
+
             System.out.println(response);
             returnResponse(t, response);
         } catch (Exception e) {
@@ -155,8 +155,10 @@ public class LoadBalancer implements HttpHandler {
     }
 
     private long estimateBBLs(long pixels) {
-        long gtValue = Math.round(pixels * (1 + pixelsThresholdPercentage));
-        long ltValue = Math.round(pixels * (1 - pixelsThresholdPercentage));
+        long gtValue = Math.round(pixels * (1 - pixelsThresholdPercentage));
+        long ltValue = Math.round(pixels * (1 + pixelsThresholdPercentage));
+
+        System.out.println(String.format("pixels: %s\tgt: %s\tlt: %s", pixels, gtValue, ltValue));
 
         ScanResult result = DynamoDBUtil.filterDBForResolution(DynamoDBUtil.getDynamoDB(), "vms2", gtValue, ltValue);
 

@@ -72,10 +72,9 @@ public class DynamoDBUtil {
             long ltValue) {
         HashMap<String, Condition> scanFilter = new HashMap<String, Condition>();
         Condition condition = new Condition()
-                .withComparisonOperator(ComparisonOperator.GT.toString())
-                .withAttributeValueList(new AttributeValue().withN(Long.toString(gtValue)))
-                .withComparisonOperator(ComparisonOperator.LT.toString())
-                .withAttributeValueList(new AttributeValue().withN(Long.toString(ltValue)));
+                .withComparisonOperator(ComparisonOperator.BETWEEN.toString())
+                .withAttributeValueList(new AttributeValue().withN(Long.toString(gtValue)),
+                        new AttributeValue().withN(Long.toString(ltValue)));
         scanFilter.put("resolution", condition);
         ScanRequest scanRequest = new ScanRequest(tableName).withScanFilter(scanFilter);
         ScanResult scanResult = dynamoDB.scan(scanRequest);
@@ -103,7 +102,7 @@ public class DynamoDBUtil {
     private static Map<String, AttributeValue> newItem(UUID id, long resolution, long bbls) {
         Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
         item.put("id", new AttributeValue(id.toString()));
-        item.put("resolution", new AttributeValue(Long.toString(resolution)));
+        item.put("resolution", new AttributeValue().withN(Long.toString(resolution)));
         item.put("bbls", new AttributeValue().withN(Long.toString(bbls)));
         return item;
     }
