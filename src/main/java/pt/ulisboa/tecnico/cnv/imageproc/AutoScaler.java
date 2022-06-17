@@ -117,6 +117,9 @@ public class AutoScaler implements Runnable {
                         }
                         totalAvg += instanceAvg / OBS_TIME_MINUTES;
                     }
+                    else {
+                        markInstanceForDeletion(instance.getInstanceId());
+                    }
                 }
                 System.out.println("Total average: " + totalAvg);
                 scaleVMsAccordingly(totalAvg, highestInstanceAvgId);
@@ -227,15 +230,15 @@ public class AutoScaler implements Runnable {
         return request;
     }
 
-    private void markInstanceForDeletion(String highestInstanceAvgId) {
-        if (highestInstanceAvgId != "") {
-            VM vm = vms.get(highestInstanceAvgId);
+    private void markInstanceForDeletion(String iid) {
+        if (iid != "") {
+            VM vm = vms.get(iid);
             if (vm != null) {
                 vm.markedForDeletion = true;
                 System.out.println("Marked VM with Id " + vm.id + " for deletion");
             } else
                 System.out.println(
-                        "Tried to get VM with highestInstanceAvg of " + highestInstanceAvgId + " but got null");
+                        "Tried to get VM with highestInstanceAvg of " + iid + " but got null");
         }
         // Have to let LB know that it's marked for deletion?
     }
