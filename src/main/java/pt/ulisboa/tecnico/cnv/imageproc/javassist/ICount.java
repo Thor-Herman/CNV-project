@@ -6,10 +6,13 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javassist.CannotCompileException;
 import javassist.CtBehavior;
+import pt.ulisboa.tecnico.cnv.imageproc.InstrumentationInfo;
+import pt.ulisboa.tecnico.cnv.imageproc.WebServer;
 
-public class ICount extends CodeDumper {
+public class ICount extends AbstractJavassistTool {
 
-    Map<Long, Long> threadIdToBasicBlocks = new ConcurrentHashMap<>(); // We have to map each request (threadId) to amount of basic blocks it took
+    Map<Long, Long> threadIdToBasicBlocks = new ConcurrentHashMap<>(); // We have to map each request (threadId) to
+                                                                       // amount of basic blocks it took
 
     /**
      * Number of executed basic blocks.
@@ -39,6 +42,10 @@ public class ICount extends CodeDumper {
         nmethods++;
     }
 
+    public static void resetBBLs() {
+        nblocks = 0;
+    }
+
     public static void printStatistics() {
         System.out
                 .println(String.format("[%s] Number of executed methods: %s", ICount.class.getSimpleName(), nmethods));
@@ -48,6 +55,11 @@ public class ICount extends CodeDumper {
                 String.format("[%s] Number of executed instructions: %s", ICount.class.getSimpleName(), ninsts));
     }
 
+    public static void addBBLs() {
+        List<InstrumentationInfo> info = WebServer.processingThreads.get(Thread.currentThread().getId());
+        info.get(info.size() - 1).bbls = nblocks;
+    }
+
     @Override
     protected void transform(CtBehavior behavior) throws Exception {
         super.transform(behavior);
@@ -55,6 +67,10 @@ public class ICount extends CodeDumper {
 
         if (behavior.getName().equals("main")) {
             behavior.insertAfter(String.format("%s.printStatistics();", ICount.class.getName()));
+        }
+        if (behavior.getName().equals("handleRequest")) {
+            behavior.insertBefore(String.format("%s.resetBBLs();", ICount.class.getName()));
+            behavior.insertAfter(String.format("%s.addBBLs();", ICount.class.getName()));
         }
     }
 

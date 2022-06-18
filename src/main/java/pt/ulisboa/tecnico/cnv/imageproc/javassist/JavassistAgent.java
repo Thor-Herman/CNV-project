@@ -7,7 +7,7 @@ import java.util.List;
 public class JavassistAgent {
 
     private static AbstractJavassistTool getTransformer(String toolName, List<String> packageNameList, String writeDestination) throws Exception {
-        Class<?> transformerClass = Class.forName("pt.ulisboa.tecnico.cnv.javassist.tools." + toolName);
+        Class<?> transformerClass = Class.forName("pt.ulisboa.tecnico.cnv.imageproc.javassist." + toolName);
         return (AbstractJavassistTool) transformerClass.getDeclaredConstructor(List.class, String.class).newInstance(packageNameList, writeDestination);
     }
 
