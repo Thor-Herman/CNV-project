@@ -62,9 +62,9 @@ public class DynamoDBUtil {
         System.out.println("Table Description: " + tableDescription);
     }
 
-    public static void putNewResult(AmazonDynamoDB dynamoDB, String tableName, UUID id, long resolution,
+    public static void putNewResult(AmazonDynamoDB dynamoDB, String tableName, UUID id, String path, long resolution,
             long basicblocks) {
-        PutItemResult result = dynamoDB.putItem(new PutItemRequest(tableName, newItem(id, resolution, basicblocks)));
+        PutItemResult result = dynamoDB.putItem(new PutItemRequest(tableName, newItem(id, path, resolution, basicblocks)));
         System.out.println(result);
     }
 
@@ -99,9 +99,10 @@ public class DynamoDBUtil {
         System.out.println("Error Message: " + ace.getMessage());
     }
 
-    private static Map<String, AttributeValue> newItem(UUID id, long resolution, long bbls) {
+    private static Map<String, AttributeValue> newItem(UUID id, String path, long resolution, long bbls) {
         Map<String, AttributeValue> item = new HashMap<String, AttributeValue>();
         item.put("id", new AttributeValue(id.toString()));
+        item.put("path", new AttributeValue(path));
         item.put("resolution", new AttributeValue().withN(Long.toString(resolution)));
         item.put("bbls", new AttributeValue().withN(Long.toString(bbls)));
         return item;

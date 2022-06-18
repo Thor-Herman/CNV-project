@@ -23,7 +23,7 @@ public class MSSConnector implements Runnable {
                         .filter(x -> x.done)
                         .forEach(info -> {
                             System.out.println(info);
-                            DynamoDBUtil.putNewResult(dynamoDB, "vms2", info.id, info.pixels, info.bbls);
+                            DynamoDBUtil.putNewResult(dynamoDB, "vms2", info.id, info.path, info.pixels, info.bbls);
                         });
                 List<InstrumentationInfo> newThreadInfo = threadInfo.stream()
                         .filter(x -> !x.done)

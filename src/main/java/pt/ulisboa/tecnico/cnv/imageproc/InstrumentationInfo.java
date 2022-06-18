@@ -8,9 +8,11 @@ public class InstrumentationInfo {
     public boolean done = false;
     public long pixels = 0;
     public long bbls = 0;
+    public String path = "";
 
-    public InstrumentationInfo(long pixels) {
+    public InstrumentationInfo(long pixels, String path) {
         this.pixels = pixels;
+        this.path = path;
         id = UUID.randomUUID();
     }
 

@@ -27,7 +27,7 @@ public abstract class ImageProcessingHandler implements HttpHandler, RequestHand
 
     abstract BufferedImage process(BufferedImage bi) throws IOException;
 
-    private String handleRequest(String inputEncoded, String format) {
+    private String handleRequest(String inputEncoded, String format, String pathInfo) {
         byte[] decoded = Base64.getDecoder().decode(inputEncoded);
         try {
             ByteArrayInputStream bais = new ByteArrayInputStream(decoded);
@@ -37,7 +37,7 @@ public abstract class ImageProcessingHandler implements HttpHandler, RequestHand
             Long threadId = Thread.currentThread().getId();
             if (!WebServer.processingThreads.containsKey(threadId))
                 WebServer.processingThreads.put(threadId, new ArrayList<InstrumentationInfo>());
-            InstrumentationInfo instrumentationInfo = new InstrumentationInfo(pixels);
+            InstrumentationInfo instrumentationInfo = new InstrumentationInfo(pixels, pathInfo);
             WebServer.processingThreads.get(threadId).add(instrumentationInfo);
 
             bi = process(bi);
@@ -66,10 +66,11 @@ public abstract class ImageProcessingHandler implements HttpHandler, RequestHand
         } else {
             InputStream stream = t.getRequestBody();
             // Result syntax: data:image/<format>;base64,<encoded image>
+            String pathInfo = t.getHttpContext().getPath();
             String result = new BufferedReader(new InputStreamReader(stream)).lines().collect(Collectors.joining("\n"));
             String[] resultSplits = result.split(",");
             String format = resultSplits[0].split("/")[1].split(";")[0];
-            String output = handleRequest(resultSplits[1], format);
+            String output = handleRequest(resultSplits[1], format, pathInfo);
             t.sendResponseHeaders(200, output.length());
             OutputStream os = t.getResponseBody();
             os.write(output.getBytes());
@@ -80,6 +81,6 @@ public abstract class ImageProcessingHandler implements HttpHandler, RequestHand
 
     @Override
     public String handleRequest(Map<String, String> event, Context context) {
-        return handleRequest(event.get("body"), event.get("fileFormat"));
+        return handleRequest(event.get("body"), event.get("fileFormat"), null);
     }
 }
