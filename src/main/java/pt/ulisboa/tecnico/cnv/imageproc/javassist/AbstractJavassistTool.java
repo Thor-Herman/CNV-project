@@ -1,4 +1,4 @@
-package pt.ulisboa.tecnico.cnv.imageproc;
+package pt.ulisboa.tecnico.cnv.imageproc.javassist;
 
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;

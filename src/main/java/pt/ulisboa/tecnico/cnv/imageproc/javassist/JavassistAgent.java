@@ -1,4 +1,4 @@
-package pt.ulisboa.tecnico.cnv.imageproc;
+package pt.ulisboa.tecnico.cnv.imageproc.javassist;
 
 import java.lang.instrument.Instrumentation;
 import java.util.Arrays;
