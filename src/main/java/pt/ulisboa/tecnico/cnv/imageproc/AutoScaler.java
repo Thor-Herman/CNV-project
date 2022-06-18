@@ -36,7 +36,7 @@ public class AutoScaler implements Runnable {
     private static final int MIN_VM_AMOUNT = 1;
     private static final int MAX_VM_AMOUNT = 3;
     private static final float DECREASE_VMS_THRESHOLD = 3f; // Must be number between 0 and 100;
-    private static final float INCREASE_VMS_THRESHOLD = 95f; // Must be number between 0 and 100;
+    private static final float INCREASE_VMS_THRESHOLD = 90f; // Must be number between 0 and 100;
     private static final int HEALTH_CHECK_FREQUENCY = 3;
 
     private final String ipOfThisVM;
@@ -108,17 +108,15 @@ public class AutoScaler implements Runnable {
                 for (Instance instance : instances) {
                     if (ipOfThisVM.equals(instance.getPublicIpAddress()))
                         continue;
-                    boolean healthyVM = healthCheckInstance(instance);
-                    if (healthyVM) {
-                        Double instanceAvg = processInstanceInRoutine(instance, instanceDimension);
-                        if (instanceAvg > highestInstanceAvg) {
-                            highestInstanceAvg = instanceAvg;
-                            highestInstanceAvgId = instance.getInstanceId();
-                        }
-                        totalAvg += instanceAvg / OBS_TIME_MINUTES;
-                    } else {
+                    Double instanceAvg = processInstanceInRoutine(instance, instanceDimension);
+                    boolean unhealthyVm = instanceAvg == -1.0f;
+                    if (unhealthyVm)
                         markInstanceForDeletion(instance.getInstanceId());
+                    else if (instanceAvg > highestInstanceAvg) {
+                        highestInstanceAvg = instanceAvg;
+                        highestInstanceAvgId = instance.getInstanceId();
                     }
+                    totalAvg += unhealthyVm ? 0 : instanceAvg / OBS_TIME_MINUTES;
                 }
                 System.out.println("Total average: " + totalAvg);
                 scaleVMsAccordingly(totalAvg, highestInstanceAvgId);
@@ -130,6 +128,7 @@ public class AutoScaler implements Runnable {
                 System.out.println(e);
             }
         }
+
     }
 
     private boolean healthCheckInstance(Instance instance) {
@@ -166,11 +165,15 @@ public class AutoScaler implements Runnable {
         if (state.equals("running")) {
             System.out.println("Instance " + iid);
             VM correspondingVM = vms.get(iid);
+            boolean healthyVM = healthCheckInstance(instance);
+            if (!healthyVM)
+                return -1.0;
             checkAndHandleChangedStateSinceLastUpdate(instance, correspondingVM);
             checkAndHandleMarkedForDeletion(iid, correspondingVM);
 
             instanceDimension.setValue(iid);
             instanceAvg = getInstanceAvg(iid, instanceDimension);
+            correspondingVM.cpuUtilization = instanceAvg;
         }
         return instanceAvg;
     }
@@ -201,7 +204,8 @@ public class AutoScaler implements Runnable {
     }
 
     private void checkAndHandleChangedStateSinceLastUpdate(Instance instance, VM correspondingVM) {
-        boolean vmHasChangedStateSinceLastUpdate = correspondingVM.state == VMState.PENDING;
+        boolean vmHasChangedStateSinceLastUpdate = correspondingVM.state == VMState.PENDING
+                && instance.getState().getName().equals("running");
         if (vmHasChangedStateSinceLastUpdate) {
             correspondingVM.state = VMState.RUNNING;
             correspondingVM.ipAddress = instance.getPublicIpAddress();
@@ -245,6 +249,7 @@ public class AutoScaler implements Runnable {
     private void loadVMsFromAmazon() throws Exception {
         List<Instance> instances = EC2Utility.getRunningInstances(ec2);
         for (Instance instance : instances) {
+            System.out.println(instance);
             String iid = instance.getInstanceId();
             String ip = instance.getPublicIpAddress();
             if (ip.equals(ipOfThisVM))
@@ -267,4 +272,5 @@ public class AutoScaler implements Runnable {
     public static List<VM> getVMsRunning() {
         return vms.values().stream().filter(vm -> vm.state == VMState.RUNNING).collect(Collectors.toList());
     }
+
 }

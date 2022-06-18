@@ -16,6 +16,7 @@ import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpClient.Version;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -56,7 +57,8 @@ public class LoadBalancer implements HttpHandler {
 
     int roundRobinIndex = -1;
     String endpoint;
-    public static float pixelsThresholdPercentage = 0.05f;
+    public static float PIXELS_THRESHOLD_PERCENTAGE = 0.05f;
+    public static float LAMBDA_CPU_UTIL_THRESHOLD = 90f;
 
     public LoadBalancer(String endpoint, AmazonEC2 ec2) {
         this.ec2 = ec2;
@@ -65,12 +67,6 @@ public class LoadBalancer implements HttpHandler {
 
     private void handleRequest(HttpExchange t) throws IOException {
         try {
-
-            long pixels = getPixelsFromHttpExchange(t);
-            long estimatedBBLs = estimateBBLs(pixels, t.getHttpContext().getPath());
-
-            System.out.println("ESTIMATED BBLS FOR PIXELS " + pixels + ": " + estimatedBBLs);
-
             String response = getAreAllVMsBusy() ? launchLambda(t) : sendReqToVM(t);
 
             System.out.println(response);
@@ -82,21 +78,33 @@ public class LoadBalancer implements HttpHandler {
     }
 
     private boolean getAreAllVMsBusy() {
-        return AutoScaler.vms.values().stream().allMatch(vm -> vm.currentAmountOfRequests > 0);
+        boolean noVMsRunning = AutoScaler.getVMsRunning().size() == 0;
+        boolean allVMsAtCapacity = AutoScaler.getVMsRunning().stream()
+                .allMatch(vm -> vm.cpuUtilization > LAMBDA_CPU_UTIL_THRESHOLD); 
+        System.out.println(String.format("noVMsRunning:%s  at capacity:%s", noVMsRunning, allVMsAtCapacity));
+        return noVMsRunning || allVMsAtCapacity;
     }
 
     private String sendReqToVM(HttpExchange t) throws Exception {
+
+        long pixels = getPixelsFromHttpExchange(t);
+        long estimatedBBLs = estimateBBLs(pixels, t.getHttpContext().getPath());
+        System.out.println("ESTIMATED BBLS FOR PIXELS " + pixels + ": " + estimatedBBLs);
+
         VM vm = getNextVM();
+        vm.bblsAssumedToBeProcessing += estimatedBBLs;
         vm.currentAmountOfRequests++;
         String response = forwardRequest(t, vm.ipAddress);
         vm.currentAmountOfRequests--;
+        vm.bblsAssumedToBeProcessing -= estimatedBBLs;
         return response;
     }
 
     private VM getNextVM() {
         List<VM> vms = AutoScaler.getVMsRunning();
-        roundRobinIndex = roundRobinIndex >= vms.size() - 1 ? 0 : roundRobinIndex + 1;
-        return vms.get(roundRobinIndex);
+        VM vmWithLeastBBLs = vms.stream().reduce(vms.get(0),
+                (acc, val) -> acc.bblsAssumedToBeProcessing < val.bblsAssumedToBeProcessing ? acc : val);
+        return vmWithLeastBBLs;
     }
 
     private String launchLambda(HttpExchange t) throws IOException {
@@ -157,8 +165,8 @@ public class LoadBalancer implements HttpHandler {
     }
 
     private long estimateBBLs(long pixels, String path) {
-        long gtValue = Math.round(pixels * (1 - pixelsThresholdPercentage));
-        long ltValue = Math.round(pixels * (1 + pixelsThresholdPercentage));
+        long gtValue = Math.round(pixels * (1 - PIXELS_THRESHOLD_PERCENTAGE));
+        long ltValue = Math.round(pixels * (1 + PIXELS_THRESHOLD_PERCENTAGE));
 
         System.out.println(String.format("pixels: %s\tgt: %s\tlt: %s", pixels, gtValue, ltValue));
 
@@ -167,6 +175,9 @@ public class LoadBalancer implements HttpHandler {
 
         long totalValue = 0;
         double totalHits = result.getCount();
+
+        if (totalHits == 0)
+            return heuristicBBLs(pixels);
 
         for (Map<String, AttributeValue> match : result.getItems()) {
             totalValue += match.keySet().stream()
@@ -180,6 +191,10 @@ public class LoadBalancer implements HttpHandler {
         long estimate = Math.round(totalValue / totalHits);
 
         return estimate;
+    }
+
+    private long heuristicBBLs(long pixels) {
+        return 6371335; // TODO: Compute an average after we get a lot of results
     }
 
     @Override

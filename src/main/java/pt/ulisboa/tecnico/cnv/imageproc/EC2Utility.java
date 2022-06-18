@@ -24,7 +24,7 @@ import com.amazonaws.services.ec2.model.DescribeAvailabilityZonesResult;
 public class EC2Utility {
 
     private static String AWS_REGION = "us-east-1";
-    private static String AMI_ID = "ami-04345f610f116005a";
+    private static String AMI_ID = "ami-0093a991c775aecce";
     private static String KEY_NAME = "hotmail-key-pair";
     private static String SEC_GROUP_ID = "sg-001eff3da8fe18a42";
 
