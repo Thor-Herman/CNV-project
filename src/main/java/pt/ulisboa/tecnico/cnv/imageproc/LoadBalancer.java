@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.imageio.ImageIO;
 
@@ -32,6 +33,7 @@ import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.dynamodbv2.document.Attribute;
 import com.amazonaws.services.dynamodbv2.model.AttributeValue;
 import com.amazonaws.services.dynamodbv2.model.ScanResult;
+import com.amazonaws.services.dynamodbv2.model.SourceTableDetails;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.model.Instance;
 
@@ -163,16 +165,17 @@ public class LoadBalancer implements HttpHandler {
         ScanResult result = DynamoDBUtil.filterDBForResolution(DynamoDBUtil.getDynamoDB(), "vms2", gtValue, ltValue);
 
         long totalValue = 0;
-        long totalHits = 0;
+        double totalHits = result.getCount();
 
         for (Map<String, AttributeValue> match : result.getItems()) {
-            totalValue = match.values().stream()
+            totalValue += match.keySet().stream()
+                    .filter(x -> x.equals("bbls"))
+                    .map(x -> match.get(x))
                     .map(x -> x.getN())
+                    .filter(x -> x != null)
                     .mapToLong(Long::parseLong)
                     .sum();
-            totalHits = match.size();
         }
-
         long estimate = Math.round(totalValue / totalHits);
 
         return estimate;
