@@ -64,18 +64,22 @@ public class DynamoDBUtil {
 
     public static void putNewResult(AmazonDynamoDB dynamoDB, String tableName, UUID id, String path, long resolution,
             long basicblocks) {
-        PutItemResult result = dynamoDB.putItem(new PutItemRequest(tableName, newItem(id, path, resolution, basicblocks)));
+        PutItemResult result = dynamoDB
+                .putItem(new PutItemRequest(tableName, newItem(id, path, resolution, basicblocks)));
         System.out.println(result);
     }
 
-    public static ScanResult filterDBForResolution(AmazonDynamoDB dynamoDB, String tableName, long gtValue,
+    public static ScanResult filterDBForResolution(AmazonDynamoDB dynamoDB, String tableName, String path, long gtValue,
             long ltValue) {
         HashMap<String, Condition> scanFilter = new HashMap<String, Condition>();
-        Condition condition = new Condition()
+        Condition resolutionCondition = new Condition()
                 .withComparisonOperator(ComparisonOperator.BETWEEN.toString())
                 .withAttributeValueList(new AttributeValue().withN(Long.toString(gtValue)),
                         new AttributeValue().withN(Long.toString(ltValue)));
-        scanFilter.put("resolution", condition);
+        Condition pathCondition = new Condition().withComparisonOperator(ComparisonOperator.EQ.toString())
+                .withAttributeValueList(new AttributeValue(path));
+        scanFilter.put("resolution", resolutionCondition);
+        scanFilter.put("path", pathCondition);
         ScanRequest scanRequest = new ScanRequest(tableName).withScanFilter(scanFilter);
         ScanResult scanResult = dynamoDB.scan(scanRequest);
         System.out.println("Result: " + scanResult);

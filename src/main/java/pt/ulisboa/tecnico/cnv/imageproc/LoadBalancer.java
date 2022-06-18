@@ -67,7 +67,7 @@ public class LoadBalancer implements HttpHandler {
         try {
 
             long pixels = getPixelsFromHttpExchange(t);
-            long estimatedBBLs = estimateBBLs(pixels);
+            long estimatedBBLs = estimateBBLs(pixels, t.getHttpContext().getPath());
 
             System.out.println("ESTIMATED BBLS FOR PIXELS " + pixels + ": " + estimatedBBLs);
 
@@ -156,13 +156,14 @@ public class LoadBalancer implements HttpHandler {
         return pixels;
     }
 
-    private long estimateBBLs(long pixels) {
+    private long estimateBBLs(long pixels, String path) {
         long gtValue = Math.round(pixels * (1 - pixelsThresholdPercentage));
         long ltValue = Math.round(pixels * (1 + pixelsThresholdPercentage));
 
         System.out.println(String.format("pixels: %s\tgt: %s\tlt: %s", pixels, gtValue, ltValue));
 
-        ScanResult result = DynamoDBUtil.filterDBForResolution(DynamoDBUtil.getDynamoDB(), "vms2", gtValue, ltValue);
+        ScanResult result = DynamoDBUtil.filterDBForResolution(DynamoDBUtil.getDynamoDB(), "vms2", path, gtValue,
+                ltValue);
 
         long totalValue = 0;
         double totalHits = result.getCount();
