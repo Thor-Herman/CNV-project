@@ -11,9 +11,6 @@ import pt.ulisboa.tecnico.cnv.imageproc.WebServer;
 
 public class ICount extends AbstractJavassistTool {
 
-    Map<Long, Long> threadIdToBasicBlocks = new ConcurrentHashMap<>(); // We have to map each request (threadId) to
-                                                                       // amount of basic blocks it took
-
     /**
      * Number of executed basic blocks.
      */
@@ -57,7 +54,7 @@ public class ICount extends AbstractJavassistTool {
 
     public static void addBBLs() {
         List<InstrumentationInfo> info = WebServer.processingThreads.get(Thread.currentThread().getId());
-        info.get(info.size() - 1).bbls = nblocks;
+        info.get(info.size() - 1).bbls = nblocks; // Last added instrumentationInfo in this thread will be the one we created 
     }
 
     @Override
