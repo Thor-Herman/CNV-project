@@ -101,6 +101,10 @@ public class AutoScaler implements Runnable {
                 Dimension instanceDimension = getInstanceDimension();
                 Set<Instance> instances = EC2Utility.getInstances(ec2);
 
+                if (instances.size() < MIN_VM_AMOUNT) { // Fault prevention in case VM is suddenly killed
+                    launchVMsUntilMinimumReached();
+                }
+
                 Double totalAvg = 0.0;
                 Double highestInstanceAvg = 0.0;
                 String highestInstanceAvgId = "";
@@ -151,6 +155,7 @@ public class AutoScaler implements Runnable {
         int statusCode;
         try {
             statusCode = client.send(request, HttpResponse.BodyHandlers.ofString()).statusCode();
+            vms.get(instance.getInstanceId()).cyclesSinceHealthCheck = 0;
         } catch (Exception e) {
             return false;
         }
