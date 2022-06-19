@@ -68,8 +68,6 @@ public class LoadBalancer implements HttpHandler {
     private void handleRequest(HttpExchange t) throws IOException {
         try {
             String response = getAreAllVMsBusy() ? launchLambda(t) : sendReqToVM(t);
-
-            System.out.println(response);
             returnResponse(t, response);
         } catch (Exception e) {
             System.out.println(e);
@@ -80,21 +78,20 @@ public class LoadBalancer implements HttpHandler {
     private boolean getAreAllVMsBusy() {
         boolean noVMsRunning = AutoScaler.getVMsRunning().size() == 0;
         boolean allVMsAtCapacity = AutoScaler.getVMsRunning().stream()
-                .allMatch(vm -> vm.cpuUtilization > LAMBDA_CPU_UTIL_THRESHOLD); 
+                .allMatch(vm -> vm.cpuUtilization > LAMBDA_CPU_UTIL_THRESHOLD);
         System.out.println(String.format("noVMsRunning:%s  at capacity:%s", noVMsRunning, allVMsAtCapacity));
         return noVMsRunning || allVMsAtCapacity;
     }
 
     private String sendReqToVM(HttpExchange t) throws Exception {
-
-        long pixels = getPixelsFromHttpExchange(t);
+        String body = new String(t.getRequestBody().readAllBytes(), StandardCharsets.UTF_8); // Can only read requestBody once! 
+        long pixels = getPixelsFromHttpExchange(body);
         long estimatedBBLs = estimateBBLs(pixels, t.getHttpContext().getPath());
         System.out.println("ESTIMATED BBLS FOR PIXELS " + pixels + ": " + estimatedBBLs);
-
         VM vm = getNextVM();
         vm.bblsAssumedToBeProcessing += estimatedBBLs;
         vm.currentAmountOfRequests++;
-        String response = forwardRequest(t, vm.ipAddress);
+        String response = forwardRequest(t, vm.ipAddress, body);
         vm.currentAmountOfRequests--;
         vm.bblsAssumedToBeProcessing -= estimatedBBLs;
         return response;
@@ -130,14 +127,20 @@ public class LoadBalancer implements HttpHandler {
         return payload;
     }
 
-    private String forwardRequest(HttpExchange t, String ip) throws Exception {
+    private String forwardRequest(HttpExchange t, String ip, String body) throws Exception {
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://" + ip + ":" + 8000 + endpoint))
-                .POST(HttpRequest.BodyPublishers.ofByteArray(t.getRequestBody().readAllBytes()))
+                .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
         System.out.println(request);
-        return client.send(request, HttpResponse.BodyHandlers.ofString()).body();
+        String resp = "";
+        try {
+            resp = client.send(request, HttpResponse.BodyHandlers.ofString()).body();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return resp;
     }
 
     private void returnResponse(HttpExchange t, String response) throws Exception {
@@ -147,10 +150,8 @@ public class LoadBalancer implements HttpHandler {
         os.close();
     }
 
-    public static long getPixelsFromHttpExchange(HttpExchange t) {
-        InputStream stream = t.getRequestBody();
-        String result = new BufferedReader(new InputStreamReader(stream)).lines().collect(Collectors.joining("\n"));
-        String[] resultSplits = result.split(",");
+    public static long getPixelsFromHttpExchange(String body) {
+        String[] resultSplits = body.split(",");
         byte[] decoded = Base64.getDecoder().decode(resultSplits[1]);
         ByteArrayInputStream bais = new ByteArrayInputStream(decoded);
         BufferedImage bi;
