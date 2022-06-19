@@ -21,6 +21,7 @@ import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
+import javassist.CannotCompileException;
 import javassist.tools.web.Webserver;
 
 public abstract class ImageProcessingHandler implements HttpHandler, RequestHandler<Map<String, String>, String> {
@@ -48,14 +49,15 @@ public abstract class ImageProcessingHandler implements HttpHandler, RequestHand
             instrumentationInfo.done = true;
 
             return new String(outputEncoded);
-        } catch (IOException e) {
+        } catch (Exception e) {
+            System.out.println(e);
             return e.toString();
         }
     }
 
     @Override
     public void handle(HttpExchange t) throws IOException {
-
+        System.out.println("GOT A REQUEST");
         if (t.getRequestHeaders().getFirst("Origin") != null) {
             t.getResponseHeaders().add("Access-Control-Allow-Origin", t.getRequestHeaders().getFirst("Origin"));
         }
@@ -64,17 +66,22 @@ public abstract class ImageProcessingHandler implements HttpHandler, RequestHand
             t.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type,API-Key");
             t.sendResponseHeaders(204, -1);
         } else {
-            InputStream stream = t.getRequestBody();
-            // Result syntax: data:image/<format>;base64,<encoded image>
-            String pathInfo = t.getHttpContext().getPath();
-            String result = new BufferedReader(new InputStreamReader(stream)).lines().collect(Collectors.joining("\n"));
-            String[] resultSplits = result.split(",");
-            String format = resultSplits[0].split("/")[1].split(";")[0];
-            String output = handleRequest(resultSplits[1], format, pathInfo);
-            t.sendResponseHeaders(200, output.length());
-            OutputStream os = t.getResponseBody();
-            os.write(output.getBytes());
-            os.close();
+            try {
+                InputStream stream = t.getRequestBody();
+                // Result syntax: data:image/<format>;base64,<encoded image>
+                String pathInfo = t.getHttpContext().getPath();
+                String result = new BufferedReader(new InputStreamReader(stream)).lines()
+                        .collect(Collectors.joining("\n"));
+                String[] resultSplits = result.split(",");
+                String format = resultSplits[0].split("/")[1].split(";")[0];
+                String output = handleRequest(resultSplits[1], format, pathInfo);
+                t.sendResponseHeaders(200, output.length());
+                OutputStream os = t.getResponseBody();
+                os.write(output.getBytes());
+                os.close();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
 
         }
     }
