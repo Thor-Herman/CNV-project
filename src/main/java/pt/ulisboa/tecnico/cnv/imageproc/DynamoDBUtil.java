@@ -82,7 +82,7 @@ public class DynamoDBUtil {
         scanFilter.put("path", pathCondition);
         ScanRequest scanRequest = new ScanRequest(tableName).withScanFilter(scanFilter);
         ScanResult scanResult = dynamoDB.scan(scanRequest);
-        System.out.println("Result: " + scanResult);
+        // System.out.println("Result: " + scanResult);
         return scanResult;
     }
 

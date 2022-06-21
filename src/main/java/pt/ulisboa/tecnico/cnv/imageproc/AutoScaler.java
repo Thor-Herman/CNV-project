@@ -31,7 +31,7 @@ public class AutoScaler implements Runnable {
     private AmazonEC2 ec2;
     private AmazonCloudWatch cloudWatch;
 
-    private static final int OBS_TIME_MINUTES = 1;
+    private static final int OBS_TIME_MINUTES = 2;
     private static final int OBS_TIME_MS = 1000 * 60 * OBS_TIME_MINUTES;
     private static final int MIN_VM_AMOUNT = 1;
     private static final int MAX_VM_AMOUNT = 3;
