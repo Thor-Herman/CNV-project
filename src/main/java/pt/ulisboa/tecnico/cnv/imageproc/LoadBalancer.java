@@ -79,7 +79,7 @@ public class LoadBalancer implements HttpHandler {
         boolean noVMsRunning = AutoScaler.getVMsRunning().size() == 0;
         boolean allVMsAtCapacity = AutoScaler.getVMsRunning().stream()
                 .allMatch(vm -> vm.cpuUtilization > LAMBDA_CPU_UTIL_THRESHOLD);
-        System.out.println(String.format("noVMsRunning:%s  at capacity:%s", noVMsRunning, allVMsAtCapacity));
+        // System.out.println(String.format("noVMsRunning:%s  at capacity:%s", noVMsRunning, allVMsAtCapacity));
         return noVMsRunning || allVMsAtCapacity;
     }
 
@@ -133,7 +133,7 @@ public class LoadBalancer implements HttpHandler {
                 .uri(URI.create("http://" + ip + ":" + 8000 + endpoint))
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
-        System.out.println(request);
+        // System.out.println(request);
         String resp = "";
         try {
             resp = client.send(request, HttpResponse.BodyHandlers.ofString()).body();
@@ -178,7 +178,7 @@ public class LoadBalancer implements HttpHandler {
         double totalHits = result.getCount();
 
         if (totalHits == 0)
-            return heuristicBBLs(pixels);
+            return heuristicBBLs(pixels, path);
 
         for (Map<String, AttributeValue> match : result.getItems()) {
             totalValue += match.keySet().stream()
@@ -194,8 +194,19 @@ public class LoadBalancer implements HttpHandler {
         return estimate;
     }
 
-    private long heuristicBBLs(long pixels) {
-        return 6371335; // TODO: Compute an average after we get a lot of results
+    private long heuristicBBLs(long pixels, String path) {
+        switch (path) {
+            case "/blurimage": 
+                return pixels * 395;
+            case "/enhanceimage":
+                return pixels * 295;
+            case "/classifyimage":
+                return pixels * 2;
+            case "/detectqrcode":
+                return pixels * 17;
+            default: 
+                return -1;
+        }
     }
 
     @Override
