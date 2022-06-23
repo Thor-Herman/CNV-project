@@ -19,9 +19,9 @@ cmd='echo javahome $JAVA_HOME;'
 ssh -o StrictHostKeyChecking=no -i $AWS_EC2_SSH_KEYPAR_PATH ec2-user@$(cat instance.dns) $cmd
 
 # Setup web server to start on instance launch.
-cmd="echo \"java -cp /home/ec2-user/imageproc-1.0-SNAPSHOT-jar-with-dependencies.jar pt.ulisboa.tecnico.cnv.imageproc.WebServer\" | sudo tee -a /etc/rc.local; sudo chmod +x /etc/rc.local"
+cmd="echo \"java -cp /home/ec2-user/imageproc-1.0-SNAPSHOT-jar-with-dependencies.jar -javaagent:/home/ec2-user/imageproc-1.0-SNAPSHOT-jar-with-dependencies.jar=ICount:pt.ulisboa.tecnico.cnv,boofcv:output pt.ulisboa.tecnico.cnv.imageproc.WebServer -Xmx2048m\" | sudo tee -a /etc/rc.local; sudo chmod +x /etc/rc.local"
 ssh -o StrictHostKeyChecking=no -i $AWS_EC2_SSH_KEYPAR_PATH ec2-user@$(cat instance.dns) $cmd
 
 # Run the web server immediately as well
-cmd="java -cp /home/ec2-user/imageproc-1.0-SNAPSHOT-jar-with-dependencies.jar pt.ulisboa.tecnico.cnv.imageproc.WebServer"
+cmd="java -cp /home/ec2-user/imageproc-1.0-SNAPSHOT-jar-with-dependencies.jar -javaagent:/home/ec2-user/imageproc-1.0-SNAPSHOT-jar-with-dependencies.jar=ICount:pt.ulisboa.tecnico.cnv,boofcv:output pt.ulisboa.tecnico.cnv.imageproc.WebServer -Xmx2048m"
 ssh -o StrictHostKeyChecking=no -i $AWS_EC2_SSH_KEYPAR_PATH ec2-user@$(cat instance.dns) $cmd
