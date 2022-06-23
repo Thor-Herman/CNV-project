@@ -58,7 +58,8 @@ public class LoadBalancer implements HttpHandler {
     int roundRobinIndex = -1;
     String endpoint;
     public static float PIXELS_THRESHOLD_PERCENTAGE = 0.05f;
-    public static float LAMBDA_CPU_UTIL_THRESHOLD = 90f;
+    public static float LAMBDA_CPU_UTIL_THRESHOLD = 95f;
+    public static float BBL_THRESHOLD = 80f;
 
     public LoadBalancer(String endpoint, AmazonEC2 ec2) {
         this.ec2 = ec2;
@@ -86,7 +87,8 @@ public class LoadBalancer implements HttpHandler {
     }
 
     private String sendReqToVM(HttpExchange t) throws Exception {
-        String body = new String(t.getRequestBody().readAllBytes(), StandardCharsets.UTF_8); // Can only read requestBody once! 
+        String body = new String(t.getRequestBody().readAllBytes(), StandardCharsets.UTF_8); // Can only read
+                                                                                             // requestBody once!
         long pixels = getPixelsFromHttpExchange(body);
         long estimatedBBLs = estimateBBLs(pixels, t.getHttpContext().getPath());
         System.out.println("ESTIMATED BBLS FOR PIXELS " + pixels + ": " + estimatedBBLs);
@@ -101,9 +103,14 @@ public class LoadBalancer implements HttpHandler {
 
     private VM getNextVM() {
         List<VM> vms = AutoScaler.getVMsRunning();
-        VM vmWithLeastBBLs = vms.stream().reduce(vms.get(0),
-                (acc, val) -> acc.bblsAssumedToBeProcessing < val.bblsAssumedToBeProcessing ? acc : val);
-        return vmWithLeastBBLs;
+        VM vmWithLeastProcessing = vms.stream().reduce(vms.get(0),
+                (acc, val) -> acc.cpuUtilization < val.cpuUtilization ? acc : val);
+        if (vmWithLeastProcessing.cpuUtilization > BBL_THRESHOLD) {
+            VM vmWithLeastBBLs = vms.stream().reduce(vms.get(0),
+                    (acc, val) -> acc.bblsAssumedToBeProcessing < val.bblsAssumedToBeProcessing ? acc : val);
+            vmWithLeastProcessing = vmWithLeastBBLs;
+        }
+        return vmWithLeastProcessing;
     }
 
     private String launchLambda(HttpExchange t) throws IOException {
@@ -154,7 +161,6 @@ public class LoadBalancer implements HttpHandler {
 
     public static long getPixelsFromHttpExchange(String body) {
         String[] resultSplits = body.split(",");
-        System.out.println("Body: " + body.length());
         byte[] decoded = Base64.getDecoder().decode(resultSplits[1].strip());
         ByteArrayInputStream bais = new ByteArrayInputStream(decoded);
         BufferedImage bi;
@@ -172,7 +178,7 @@ public class LoadBalancer implements HttpHandler {
         long gtValue = Math.round(pixels * (1 - PIXELS_THRESHOLD_PERCENTAGE));
         long ltValue = Math.round(pixels * (1 + PIXELS_THRESHOLD_PERCENTAGE));
 
-        System.out.println(String.format("pixels: %s\tgt: %s\tlt: %s", pixels, gtValue, ltValue));
+        // System.out.println(String.format("pixels: %s\tgt: %s\tlt: %s", pixels, gtValue, ltValue));
 
         ScanResult result = DynamoDBUtil.filterDBForResolution(DynamoDBUtil.getDynamoDB(), "vms2", path, gtValue,
                 ltValue);
