@@ -31,8 +31,8 @@ public class AutoScaler implements Runnable {
     private AmazonEC2 ec2;
     private AmazonCloudWatch cloudWatch;
 
-    private static final int OBS_TIME_MINUTES = 2;
-    private static final int OBS_TIME_MS = 1000 * 60 * OBS_TIME_MINUTES;
+    private static final float OBS_TIME_MINUTES = 1.5f;
+    private static final int OBS_TIME_MS = (int) (1000 * 60 * OBS_TIME_MINUTES);
     private static final int MIN_VM_AMOUNT = 1;
     private static final int MAX_VM_AMOUNT = 3;
     private static final float DECREASE_VMS_THRESHOLD = 3f; // Must be number between 0 and 100;
@@ -124,7 +124,7 @@ public class AutoScaler implements Runnable {
                 }
                 System.out.println("Total average: " + totalAvg);
                 scaleVMsAccordingly(totalAvg, highestInstanceAvgId);
-
+                printVMs();
                 Thread.sleep(OBS_TIME_MS);
 
             } catch (Exception e) {
@@ -155,7 +155,9 @@ public class AutoScaler implements Runnable {
         int statusCode;
         try {
             statusCode = client.send(request, HttpResponse.BodyHandlers.ofString()).statusCode();
-            vms.get(instance.getInstanceId()).cyclesSinceHealthCheck = 0;
+            VM unhealthyVM = vms.get(instance.getInstanceId());
+            unhealthyVM.cyclesSinceHealthCheck = 0;
+            unhealthyVM.currentAmountOfRequests = 0; // So that it will be shut down even with ongoing requests
         } catch (Exception e) {
             return false;
         }
@@ -165,7 +167,8 @@ public class AutoScaler implements Runnable {
     private Double processInstanceInRoutine(Instance instance, Dimension instanceDimension) {
         String iid = instance.getInstanceId();
         String state = instance.getState().getName();
-        Double instanceAvg = 0.0;
+        Double instanceAvg = 0.0; // Will return 0 for pending machines to get the global average down so not even
+                                  // more machines are spawned
 
         if (state.equals("running")) {
             System.out.println("Instance " + iid);
@@ -248,7 +251,6 @@ public class AutoScaler implements Runnable {
                 System.out.println(
                         "Tried to get VM with highestInstanceAvg of " + iid + " but got null");
         }
-        // Have to let LB know that it's marked for deletion?
     }
 
     private void loadVMsFromAmazon() throws Exception {
