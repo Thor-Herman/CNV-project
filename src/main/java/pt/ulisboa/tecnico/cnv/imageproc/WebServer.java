@@ -18,12 +18,12 @@ public class WebServer {
         DynamoDBUtil.createNewTable(DynamoDBUtil.getDynamoDB(), "vms2", "id");
 
         HttpServer server = HttpServer.create(new InetSocketAddress(8000), 0);
-        server.setExecutor(Executors.newCachedThreadPool());
         server.createContext("/blurimage", new BlurImageHandler());
         server.createContext("/enhanceimage", new EnhanceImageHandler());
         server.createContext("/detectqrcode", new DetectQrCodeHandler());
         server.createContext("/classifyimage", new ImageClassificationHandler());
         server.createContext("/healthcheck", new HealthCheck());
+        server.setExecutor(Executors.newCachedThreadPool());
         server.start();
 
         MSSConnector mssConnector = new MSSConnector();

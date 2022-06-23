@@ -14,11 +14,11 @@ public class LoadBalancerServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(8000), 0);
         AmazonEC2 ec2 = EC2Utility.getEC2Client();
         AmazonCloudWatch cloudWatch = EC2Utility.getCloudWatch();
-        server.setExecutor(Executors.newCachedThreadPool());
         server.createContext("/blurimage", new LoadBalancer("/blurimage", ec2));
         server.createContext("/enhanceimage", new LoadBalancer("/enhanceimage", ec2));
         server.createContext("/detectqrcode", new LoadBalancer("/detectqrcode", ec2));
         server.createContext("/classifyimage", new LoadBalancer("/classifyimage", ec2));
+        server.setExecutor(Executors.newCachedThreadPool());
         server.start();
 
         AutoScaler autoScaler = new AutoScaler(ec2, cloudWatch, ipAddress);

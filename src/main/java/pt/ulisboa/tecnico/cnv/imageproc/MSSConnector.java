@@ -9,7 +9,7 @@ import javassist.tools.web.Webserver;
 
 public class MSSConnector implements Runnable {
 
-    public static final int PUSH_TO_MSS_INTERVAL = 1000;
+    public static final int PUSH_TO_MSS_INTERVAL = 10000;
 
     private AmazonDynamoDB dynamoDB;
 
