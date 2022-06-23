@@ -23,7 +23,10 @@ public class VM {
 
     @Override
     public String toString() {
-        return String.format("id:%s  ip:%s  marked for deletion:%s  no. requests:%s   state:%s", id, ipAddress,
-                Boolean.toString(markedForDeletion), currentAmountOfRequests, state);
+        return String.format(
+                "id:%s\tip:%s\tmarked for deletion:%s\tno. requests:%s\tstate:%s\tno. of requests:%s\tbbls:%s\tcpu:%s",
+                id, ipAddress,
+                Boolean.toString(markedForDeletion), currentAmountOfRequests, state, currentAmountOfRequests,
+                bblsAssumedToBeProcessing, cpuUtilization);
     }
 }
