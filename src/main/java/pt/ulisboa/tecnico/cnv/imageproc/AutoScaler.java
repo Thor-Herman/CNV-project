@@ -154,9 +154,8 @@ public class AutoScaler implements Runnable {
         int statusCode;
         try {
             statusCode = client.send(request, HttpResponse.BodyHandlers.ofString()).statusCode();
-            VM unhealthyVM = vms.get(instance.getInstanceId());
-            unhealthyVM.cyclesSinceHealthCheck = 0;
-            unhealthyVM.currentAmountOfRequests = 0; // So that it will be shut down even with ongoing requests
+            VM vm = vms.get(instance.getInstanceId());
+            vm.cyclesSinceHealthCheck = 0;
         } catch (Exception e) {
             return false;
         }
@@ -173,8 +172,10 @@ public class AutoScaler implements Runnable {
             System.out.println("Instance " + iid);
             VM correspondingVM = vms.get(iid);
             boolean healthyVM = healthCheckInstance(instance);
-            if (!healthyVM)
+            if (!healthyVM) {
+                System.out.println("Unhealthy instance " + iid);
                 return -1.0;
+            }
             checkAndHandleChangedStateSinceLastUpdate(instance, correspondingVM);
             checkAndHandleMarkedForDeletion(iid, correspondingVM);
 
@@ -200,14 +201,14 @@ public class AutoScaler implements Runnable {
 
     private Double getInstanceAvg(String iid, Dimension instanceDimension) {
         GetMetricStatisticsRequest request = createMetricsStatisticsRequest(instanceDimension);
-        Double instanceAvg = 0.0;
-        List<Datapoint> dps = cloudWatch.getMetricStatistics(request).getDatapoints();
-        for (Datapoint dp : cloudWatch.getMetricStatistics(request).getDatapoints()) {
-            instanceAvg += dp.getAverage();
-            System.out.println(" CPU utilization for instance " + iid + " = " + instanceAvg);
-        }
 
-        return dps.size() == 0 ? instanceAvg : instanceAvg / dps.size();
+        List<Datapoint> dps = cloudWatch.getMetricStatistics(request).getDatapoints();
+
+        Double instanceAvg = dps.size() == 0 ? 0.0 : dps.get(dps.size() - 1).getAverage(); // Get most recent data point
+
+        System.out.println(" CPU utilization for instance " + iid + " = " + instanceAvg);
+
+        return instanceAvg;
     }
 
     private void checkAndHandleChangedStateSinceLastUpdate(Instance instance, VM correspondingVM) {
@@ -272,11 +273,21 @@ public class AutoScaler implements Runnable {
     }
 
     public static List<VM> getVMsNotMarkedForDeletion() {
-        return vms.values().stream().filter(vm -> !vm.markedForDeletion).collect(Collectors.toList());
+        return vms.values().stream()
+                .filter(vm -> !vm.markedForDeletion)
+                .collect(Collectors.toList());
     }
 
     public static List<VM> getVMsRunning() {
-        return vms.values().stream().filter(vm -> vm.state == VMState.RUNNING).collect(Collectors.toList());
+        return vms.values().stream()
+                .filter(vm -> vm.state == VMState.RUNNING)
+                .collect(Collectors.toList());
+    }
+
+    public static List<VM> getVMsRunningAndNotMarkedForDeletion() {
+        return getVMsRunning().stream()
+                .filter(getVMsNotMarkedForDeletion()::contains)
+                .collect(Collectors.toList());
     }
 
 }
