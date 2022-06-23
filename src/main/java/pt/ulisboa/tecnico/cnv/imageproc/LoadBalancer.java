@@ -70,6 +70,7 @@ public class LoadBalancer implements HttpHandler {
             String response = getAreAllVMsBusy() ? launchLambda(t) : sendReqToVM(t);
             returnResponse(t, response);
         } catch (Exception e) {
+            e.printStackTrace();
             System.out.println(e);
             return;
         }
@@ -79,7 +80,8 @@ public class LoadBalancer implements HttpHandler {
         boolean noVMsRunning = AutoScaler.getVMsRunning().size() == 0;
         boolean allVMsAtCapacity = AutoScaler.getVMsRunning().stream()
                 .allMatch(vm -> vm.cpuUtilization > LAMBDA_CPU_UTIL_THRESHOLD);
-        // System.out.println(String.format("noVMsRunning:%s  at capacity:%s", noVMsRunning, allVMsAtCapacity));
+        // System.out.println(String.format("noVMsRunning:%s at capacity:%s",
+        // noVMsRunning, allVMsAtCapacity));
         return noVMsRunning || allVMsAtCapacity;
     }
 
@@ -152,7 +154,8 @@ public class LoadBalancer implements HttpHandler {
 
     public static long getPixelsFromHttpExchange(String body) {
         String[] resultSplits = body.split(",");
-        byte[] decoded = Base64.getDecoder().decode(resultSplits[1]);
+        System.out.println("Body: " + body.length());
+        byte[] decoded = Base64.getDecoder().decode(resultSplits[1].strip());
         ByteArrayInputStream bais = new ByteArrayInputStream(decoded);
         BufferedImage bi;
         try {
@@ -196,7 +199,7 @@ public class LoadBalancer implements HttpHandler {
 
     private long heuristicBBLs(long pixels, String path) {
         switch (path) {
-            case "/blurimage": 
+            case "/blurimage":
                 return pixels * 395;
             case "/enhanceimage":
                 return pixels * 295;
@@ -204,7 +207,7 @@ public class LoadBalancer implements HttpHandler {
                 return pixels * 2;
             case "/detectqrcode":
                 return pixels * 17;
-            default: 
+            default:
                 return -1;
         }
     }
