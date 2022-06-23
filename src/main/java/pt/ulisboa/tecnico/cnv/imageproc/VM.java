@@ -24,9 +24,9 @@ public class VM {
     @Override
     public String toString() {
         return String.format(
-                "id:%s\tip:%s\tmarked for deletion:%s\tno. requests:%s\tstate:%s\tno. of requests:%s\tbbls:%s\tcpu:%s",
+                "id:%s    ip:%s    marked:%s    requests:%s    state:%s    bbls:%s    cpu:%s",
                 id, ipAddress,
-                Boolean.toString(markedForDeletion), currentAmountOfRequests, state, currentAmountOfRequests,
+                Boolean.toString(markedForDeletion), currentAmountOfRequests, state,
                 bblsAssumedToBeProcessing, cpuUtilization);
     }
 }
