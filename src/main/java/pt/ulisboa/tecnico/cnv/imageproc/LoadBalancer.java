@@ -60,15 +60,17 @@ public class LoadBalancer implements HttpHandler {
     public static float PIXELS_THRESHOLD_PERCENTAGE = 0.05f;
     public static float LAMBDA_CPU_UTIL_THRESHOLD = 95f;
     public static float BBL_THRESHOLD = 80f;
+    public static int LAMBDA_PER_EC2_REQUEST = 3;
+    private int ec2RequestsWithoutLambda = 0;
 
-    public LoadBalancer(String endpoint, AmazonEC2 ec2) {
-        this.ec2 = ec2;
+    public LoadBalancer(String endpoint) {
+        this.ec2 = EC2Utility.getEC2Client();
         this.endpoint = endpoint;
     }
 
     private void handleRequest(HttpExchange t) throws IOException {
         try {
-            String response = getAreAllVMsBusy() ? launchLambda(t) : sendReqToVM(t);
+            String response = getShouldLaunchLambda() ? launchLambda(t) : sendReqToVM(t);
             returnResponse(t, response);
         } catch (Exception e) {
             e.printStackTrace();
@@ -77,13 +79,17 @@ public class LoadBalancer implements HttpHandler {
         }
     }
 
-    private boolean getAreAllVMsBusy() {
+    private boolean getShouldLaunchLambda() {
         boolean noVMsRunning = AutoScaler.getVMsRunning().size() == 0;
+        if (noVMsRunning)
+            return true; // Can't forward to any VM
+
         boolean allVMsAtCapacity = AutoScaler.getVMsRunning().stream()
                 .allMatch(vm -> vm.cpuUtilization > LAMBDA_CPU_UTIL_THRESHOLD);
-        // System.out.println(String.format("noVMsRunning:%s at capacity:%s",
-        // noVMsRunning, allVMsAtCapacity));
-        return noVMsRunning || allVMsAtCapacity;
+
+        ec2RequestsWithoutLambda = (ec2RequestsWithoutLambda + 1) % LAMBDA_PER_EC2_REQUEST;
+
+        return allVMsAtCapacity ? ec2RequestsWithoutLambda == 0 : false;
     }
 
     private String sendReqToVM(HttpExchange t) throws Exception {
@@ -160,7 +166,6 @@ public class LoadBalancer implements HttpHandler {
         OutputStream os = t.getResponseBody();
         os.write(response.getBytes());
         os.close();
-        System.out.println("Response sent");
     }
 
     public static long getPixelsFromHttpExchange(String body) {
