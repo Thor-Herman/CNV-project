@@ -119,9 +119,9 @@ public class AutoScaler implements Runnable {
                         highestInstanceAvg = instanceAvg;
                         highestInstanceAvgId = instance.getInstanceId();
                     }
-                    totalAvg += unhealthyVm ? 0 : instanceAvg / OBS_TIME_MINUTES;
+                    totalAvg += unhealthyVm ? 0 : instanceAvg;
                 }
-                System.out.println("Total average: " + totalAvg);
+                System.out.println("\nTotal average: " + totalAvg + "\n");
                 scaleVMsAccordingly(totalAvg, highestInstanceAvgId);
                 printVMs();
                 Thread.sleep(OBS_TIME_MS);
@@ -268,7 +268,7 @@ public class AutoScaler implements Runnable {
     }
 
     private void printVMs() {
-        System.out.println("Printing vms: ");
+        System.out.println("\nPrinting vms: ");
         vms.keySet().stream().forEach(vm -> System.out.println(vms.get(vm)));
     }
 
