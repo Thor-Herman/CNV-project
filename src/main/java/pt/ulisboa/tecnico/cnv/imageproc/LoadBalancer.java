@@ -91,11 +91,14 @@ public class LoadBalancer implements HttpHandler {
                                                                                              // requestBody once!
         long pixels = getPixelsFromHttpExchange(body);
         long estimatedBBLs = estimateBBLs(pixels, t.getHttpContext().getPath());
-        System.out.println("ESTIMATED BBLS FOR PIXELS " + pixels + ": " + estimatedBBLs);
+        System.out.println(
+                "ESTIMATED BBLS FOR PIXELS " + pixels + ": " + estimatedBBLs + " " + Thread.currentThread().getId());
         VM vm = getNextVM();
         vm.bblsAssumedToBeProcessing += estimatedBBLs;
         vm.currentAmountOfRequests++;
         String response = forwardRequest(t, vm.ipAddress, body);
+        System.out.println(
+                "Request finished " + Thread.currentThread().getId());
         vm.currentAmountOfRequests--;
         vm.bblsAssumedToBeProcessing -= estimatedBBLs;
         return response;
@@ -122,7 +125,7 @@ public class LoadBalancer implements HttpHandler {
         InvokeResponse res = awsLambda.invoke(request);
         String value = res.payload().asUtf8String();
         awsLambda.close();
-        System.out.println(value);
+        // System.out.println(value);
         return value.substring(1, value.length() - 1);
     }
 
@@ -157,6 +160,7 @@ public class LoadBalancer implements HttpHandler {
         OutputStream os = t.getResponseBody();
         os.write(response.getBytes());
         os.close();
+        System.out.println("Response sent");
     }
 
     public static long getPixelsFromHttpExchange(String body) {
@@ -178,27 +182,36 @@ public class LoadBalancer implements HttpHandler {
         long gtValue = Math.round(pixels * (1 - PIXELS_THRESHOLD_PERCENTAGE));
         long ltValue = Math.round(pixels * (1 + PIXELS_THRESHOLD_PERCENTAGE));
 
-        // System.out.println(String.format("pixels: %s\tgt: %s\tlt: %s", pixels, gtValue, ltValue));
-
-        ScanResult result = DynamoDBUtil.filterDBForResolution(DynamoDBUtil.getDynamoDB(), "vms2", path, gtValue,
-                ltValue);
-
+        double totalHits = DynamoResultsCache.GetHits(path, pixels, PIXELS_THRESHOLD_PERCENTAGE);
         long totalValue = 0;
-        double totalHits = result.getCount();
+        long estimate;
 
-        if (totalHits == 0)
-            return heuristicBBLs(pixels, path);
+        if (totalHits == 0) { // Have to ask dynamo since there
+                              // are no stored results
+            System.out.println("Querying Dynamo");
+            ScanResult result = DynamoDBUtil.filterDBForResolution(DynamoDBUtil.getDynamoDB(), "vms2", path, gtValue,
+                    ltValue);
+            totalHits = result.getCount();
 
-        for (Map<String, AttributeValue> match : result.getItems()) {
-            totalValue += match.keySet().stream()
-                    .filter(x -> x.equals("bbls"))
-                    .map(x -> match.get(x))
-                    .map(x -> x.getN())
-                    .filter(x -> x != null)
-                    .mapToLong(Long::parseLong)
-                    .sum();
+            if (totalHits == 0)
+                return heuristicBBLs(pixels, path);
+
+            for (Map<String, AttributeValue> match : result.getItems()) {
+                totalValue += match.keySet().stream()
+                        .filter(x -> x.equals("bbls"))
+                        .map(x -> match.get(x))
+                        .map(x -> x.getN())
+                        .filter(x -> x != null)
+                        .mapToLong(Long::parseLong)
+                        .sum();
+
+            }
+            estimate = Math.round(totalValue / totalHits);
+            DynamoResultsCache.AddResult(path, pixels, estimate);
+        } else {
+            totalValue = DynamoResultsCache.GetTotalAvg(path, pixels, PIXELS_THRESHOLD_PERCENTAGE);
+            estimate = Math.round(totalValue / totalHits);
         }
-        long estimate = Math.round(totalValue / totalHits);
 
         return estimate;
     }
