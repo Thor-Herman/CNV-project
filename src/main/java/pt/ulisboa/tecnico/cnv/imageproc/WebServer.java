@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 
 import com.sun.net.httpserver.HttpServer;
 
@@ -17,6 +18,7 @@ public class WebServer {
         DynamoDBUtil.createNewTable(DynamoDBUtil.getDynamoDB(), "vms2", "id");
 
         HttpServer server = HttpServer.create(new InetSocketAddress(8000), 0);
+        server.setExecutor(Executors.newCachedThreadPool());
         server.createContext("/blurimage", new BlurImageHandler());
         server.createContext("/enhanceimage", new EnhanceImageHandler());
         server.createContext("/detectqrcode", new DetectQrCodeHandler());

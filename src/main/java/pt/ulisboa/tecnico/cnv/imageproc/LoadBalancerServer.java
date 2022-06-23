@@ -1,6 +1,7 @@
 package pt.ulisboa.tecnico.cnv.imageproc;
 
 import java.net.InetSocketAddress;
+import java.util.concurrent.Executors;
 
 import com.amazonaws.services.cloudwatch.AmazonCloudWatch;
 import com.amazonaws.services.ec2.AmazonEC2;
@@ -13,6 +14,7 @@ public class LoadBalancerServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(8000), 0);
         AmazonEC2 ec2 = EC2Utility.getEC2Client();
         AmazonCloudWatch cloudWatch = EC2Utility.getCloudWatch();
+        server.setExecutor(Executors.newCachedThreadPool());
         server.createContext("/blurimage", new LoadBalancer("/blurimage", ec2));
         server.createContext("/enhanceimage", new LoadBalancer("/enhanceimage", ec2));
         server.createContext("/detectqrcode", new LoadBalancer("/detectqrcode", ec2));
