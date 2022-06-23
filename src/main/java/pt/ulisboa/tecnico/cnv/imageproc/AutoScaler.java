@@ -65,7 +65,6 @@ public class AutoScaler implements Runnable {
             if (vms.values().size() < MIN_VM_AMOUNT) {
                 launchVMsUntilMinimumReached();
             }
-            printVMs();
         } catch (Exception e) {
             e.printStackTrace();
             System.out.println(e);
