@@ -201,14 +201,14 @@ public class AutoScaler implements Runnable {
 
     private Double getInstanceAvg(String iid, Dimension instanceDimension) {
         GetMetricStatisticsRequest request = createMetricsStatisticsRequest(instanceDimension);
-        Double instanceAvg = 0.0; // FOR SOME REASON QUERYING FOR JUST 1 MINUTE DOESNT WORK. SO HAVE TO
-        // GET SEVERAL DATA POINTS AND DIVIDE.
+        Double instanceAvg = 0.0;
+        List<Datapoint> dps = cloudWatch.getMetricStatistics(request).getDatapoints();
         for (Datapoint dp : cloudWatch.getMetricStatistics(request).getDatapoints()) {
             instanceAvg += dp.getAverage();
             System.out.println(" CPU utilization for instance " + iid + " = " + instanceAvg);
         }
 
-        return instanceAvg;
+        return dps.size() == 0 ? instanceAvg : instanceAvg / dps.size();
     }
 
     private void checkAndHandleChangedStateSinceLastUpdate(Instance instance, VM correspondingVM) {
