@@ -43,9 +43,9 @@ public class AutoScaler implements Runnable {
 
     public static Map<String, VM> vms = new ConcurrentHashMap<>();
 
-    public AutoScaler(AmazonEC2 ec2, AmazonCloudWatch cloudWatch, String ipOfThisVM) {
-        this.ec2 = ec2;
-        this.cloudWatch = cloudWatch;
+    public AutoScaler(String ipOfThisVM) {
+        this.ec2 = EC2Utility.getEC2Client();
+        this.cloudWatch = EC2Utility.getCloudWatch();
         this.ipOfThisVM = ipOfThisVM;
         validateConstants();
         initialize();
@@ -65,6 +65,7 @@ public class AutoScaler implements Runnable {
             if (vms.values().size() < MIN_VM_AMOUNT) {
                 launchVMsUntilMinimumReached();
             }
+            printVMs();
         } catch (Exception e) {
             e.printStackTrace();
             System.out.println(e);
@@ -95,7 +96,9 @@ public class AutoScaler implements Runnable {
     public void run() {
         while (true) {
             try {
-                System.out.println("Monitoring...");
+                Thread.sleep(OBS_TIME_MS); // Begin with sleeping so that it doesn't instantly mark VMs for deletion
+
+                System.out.println("\n\n **************************** \nMonitoring...");
 
                 Dimension instanceDimension = getInstanceDimension();
                 Set<Instance> instances = EC2Utility.getInstances(ec2);
@@ -124,7 +127,6 @@ public class AutoScaler implements Runnable {
                 System.out.println("\nTotal average: " + totalAvg + "\n");
                 scaleVMsAccordingly(totalAvg, highestInstanceAvgId);
                 printVMs();
-                Thread.sleep(OBS_TIME_MS);
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -270,6 +272,7 @@ public class AutoScaler implements Runnable {
     private void printVMs() {
         System.out.println("\nPrinting vms: ");
         vms.keySet().stream().forEach(vm -> System.out.println(vms.get(vm)));
+        System.out.println("****************************\n\n\n");
     }
 
     public static List<VM> getVMsNotMarkedForDeletion() {
